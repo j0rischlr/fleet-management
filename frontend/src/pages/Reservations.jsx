@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { Calendar, Plus, Edit, Trash2, Car } from 'lucide-react'
+import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle } from 'lucide-react'
+import ReservationCalendar from '../components/ReservationCalendar'
 
 export default function Reservations() {
   const { user, isAdmin } = useAuth()
@@ -10,6 +11,8 @@ export default function Reservations() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingReservation, setEditingReservation] = useState(null)
+  const [showReturnModal, setShowReturnModal] = useState(false)
+  const [returningReservation, setReturningReservation] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -58,6 +61,16 @@ export default function Reservations() {
   const closeModal = () => {
     setEditingReservation(null)
     setShowModal(false)
+  }
+
+  const openReturnModal = (reservation) => {
+    setReturningReservation(reservation)
+    setShowReturnModal(true)
+  }
+
+  const closeReturnModal = () => {
+    setReturningReservation(null)
+    setShowReturnModal(false)
   }
 
   const statusColors = {
@@ -147,6 +160,29 @@ export default function Reservations() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
+                    {reservation.user_id === user.id && (reservation.status === 'active' || reservation.status === 'approved') && (
+                      (() => {
+                        const endDate = new Date(reservation.end_date)
+                        const now = new Date()
+                        const canReturn = now >= endDate
+                        
+                        return (
+                          <button
+                            onClick={() => canReturn && openReturnModal(reservation)}
+                            disabled={!canReturn}
+                            className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                              canReturn
+                                ? 'text-white bg-primary-600 hover:bg-primary-700 cursor-pointer'
+                                : 'text-gray-400 bg-gray-200 cursor-not-allowed'
+                            }`}
+                            title={!canReturn ? `Disponible après le ${endDate.toLocaleString('fr-FR')}` : ''}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Rendre le véhicule
+                          </button>
+                        )
+                      })()
+                    )}
                     {isAdmin() && reservation.status === 'pending' && (
                       <>
                         <button
@@ -199,6 +235,8 @@ export default function Reservations() {
         <ReservationModal
           reservation={editingReservation}
           vehicles={vehicles.filter((v) => v.status === 'available')}
+          allVehicles={vehicles}
+          reservations={reservations}
           userId={user.id}
           onClose={closeModal}
           onSave={() => {
@@ -207,11 +245,23 @@ export default function Reservations() {
           }}
         />
       )}
+
+      {showReturnModal && (
+        <VehicleReturnModal
+          reservation={returningReservation}
+          onClose={closeReturnModal}
+          onSave={() => {
+            loadData()
+            closeReturnModal()
+          }}
+        />
+      )}
     </div>
   )
 }
 
-function ReservationModal({ reservation, vehicles, userId, onClose, onSave }) {
+function ReservationModal({ reservation, vehicles, allVehicles, reservations, userId, onClose, onSave }) {
+  const [showCalendar, setShowCalendar] = useState(!reservation)
   const [formData, setFormData] = useState(
     reservation || {
       vehicle_id: '',
@@ -224,6 +274,32 @@ function ReservationModal({ reservation, vehicles, userId, onClose, onSave }) {
     }
   )
   const [loading, setLoading] = useState(false)
+
+  const handleCalendarSelect = (slotInfo) => {
+    const startDate = new Date(slotInfo.start)
+    const endDate = new Date(slotInfo.end)
+    
+    const formatDateTime = (date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      return `${year}-${month}-${day}T${hours}:${minutes}`
+    }
+
+    setFormData({
+      ...formData,
+      start_date: formatDateTime(startDate),
+      end_date: formatDateTime(endDate),
+    })
+    setShowCalendar(false)
+  }
+
+  const handleEventClick = (event) => {
+    const res = event.resource
+    alert(`Réservation: ${res.vehicle?.brand} ${res.vehicle?.model}\nStatut: ${res.status}\nDu: ${new Date(res.start_date).toLocaleString('fr-FR')}\nAu: ${new Date(res.end_date).toLocaleString('fr-FR')}`)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -246,14 +322,58 @@ function ReservationModal({ reservation, vehicles, userId, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
-        <div className="mb-4">
+      <div className={`relative top-10 mx-auto p-5 border shadow-lg rounded-md bg-white ${
+        showCalendar ? 'w-full max-w-6xl' : 'w-full max-w-lg'
+      }`}>
+        <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-medium text-gray-900">
             {reservation ? 'Modifier la réservation' : 'Nouvelle réservation'}
           </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-6 w-6" />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {showCalendar && !reservation ? (
+          <div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600">
+                Sélectionnez une plage horaire dans le calendrier pour voir les créneaux disponibles.
+                Les réservations existantes sont affichées en couleur.
+              </p>
+            </div>
+            <ReservationCalendar
+              reservations={reservations}
+              vehicles={allVehicles}
+              onSelectSlot={handleCalendarSelect}
+              onSelectEvent={handleEventClick}
+            />
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCalendar(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+              >
+                Saisir manuellement
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {!reservation && (
+              <button
+                type="button"
+                onClick={() => setShowCalendar(true)}
+                className="mb-4 inline-flex items-center px-3 py-2 text-sm font-medium text-primary-600 hover:text-primary-700"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Voir le calendrier
+              </button>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Véhicule</label>
             <select
@@ -329,6 +449,172 @@ function ReservationModal({ reservation, vehicles, userId, onClose, onSave }) {
               className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </div>
+        </form>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function VehicleReturnModal({ reservation, onClose, onSave }) {
+  const vehicle = reservation.vehicles
+  const [formData, setFormData] = useState({
+    current_mileage: vehicle?.mileage || 0,
+    fuel_level: '',
+    battery_level: '',
+    has_issues: false,
+    issues_description: '',
+  })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      await api.post(`/reservations/${reservation.id}/return`, formData)
+      onSave()
+    } catch (error) {
+      console.error('Error returning vehicle:', error)
+      alert('Erreur lors du retour du véhicule')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isFuelVehicle = vehicle?.fuel_type === 'gasoline' || vehicle?.fuel_type === 'diesel' || vehicle?.fuel_type === 'hybrid'
+  const isElectricVehicle = vehicle?.fuel_type === 'electric' || vehicle?.fuel_type === 'hybrid'
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-medium text-gray-900">
+            Retour du véhicule
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+          <p className="text-sm font-medium text-gray-900">
+            {vehicle?.brand} {vehicle?.model}
+          </p>
+          <p className="text-sm text-gray-500">
+            Plaque: {vehicle?.license_plate}
+          </p>
+          <p className="text-sm text-gray-500">
+            Kilométrage actuel: {vehicle?.mileage?.toLocaleString()} km
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Kilométrage affiché <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              required
+              min={vehicle?.mileage || 0}
+              value={formData.current_mileage}
+              onChange={(e) => setFormData({ ...formData, current_mileage: parseInt(e.target.value) })}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              placeholder="Kilométrage actuel du véhicule"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Le kilométrage doit être supérieur ou égal à {vehicle?.mileage?.toLocaleString()} km
+            </p>
+          </div>
+
+          {isFuelVehicle && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Plein d'essence effectué ?
+              </label>
+              <select
+                value={formData.fuel_level}
+                onChange={(e) => setFormData({ ...formData, fuel_level: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">Sélectionner</option>
+                <option value="full">Plein effectué</option>
+                <option value="3/4">3/4 plein</option>
+                <option value="1/2">1/2 plein</option>
+                <option value="1/4">1/4 plein</option>
+                <option value="empty">Réservoir vide</option>
+              </select>
+            </div>
+          )}
+
+          {isElectricVehicle && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Niveau de batterie (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={formData.battery_level}
+                onChange={(e) => setFormData({ ...formData, battery_level: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                placeholder="0-100"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.has_issues}
+                onChange={(e) => setFormData({ ...formData, has_issues: e.target.checked })}
+                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              />
+              <span className="ml-2 text-sm font-medium text-gray-700">
+                Problèmes physiques constatés
+              </span>
+            </label>
+          </div>
+
+          {formData.has_issues && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Description des problèmes <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                required={formData.has_issues}
+                value={formData.issues_description}
+                onChange={(e) => setFormData({ ...formData, issues_description: e.target.value })}
+                rows={4}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Décrivez les problèmes constatés (rayures, chocs, pannes, etc.)"
+              />
+            </div>
+          )}
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+            >
+              {loading ? 'Traitement...' : 'Confirmer le retour'}
             </button>
           </div>
         </form>

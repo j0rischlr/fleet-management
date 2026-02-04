@@ -51,9 +51,14 @@ app.get('/api/vehicles/:id', async (req, res) => {
 
 app.post('/api/vehicles', async (req, res) => {
   try {
+    const vehicleData = { ...req.body };
+    if (vehicleData.vin === '') vehicleData.vin = null;
+    if (vehicleData.color === '') vehicleData.color = null;
+    if (vehicleData.notes === '') vehicleData.notes = null;
+    
     const { data, error } = await supabase
       .from('vehicles')
-      .insert([req.body])
+      .insert([vehicleData])
       .select()
       .single();
 
@@ -66,9 +71,14 @@ app.post('/api/vehicles', async (req, res) => {
 
 app.put('/api/vehicles/:id', async (req, res) => {
   try {
+    const vehicleData = { ...req.body };
+    if (vehicleData.vin === '') vehicleData.vin = null;
+    if (vehicleData.color === '') vehicleData.color = null;
+    if (vehicleData.notes === '') vehicleData.notes = null;
+    
     const { data, error } = await supabase
       .from('vehicles')
-      .update(req.body)
+      .update(vehicleData)
       .eq('id', req.params.id)
       .select()
       .single();
@@ -170,6 +180,59 @@ app.delete('/api/reservations/:id', async (req, res) => {
 
     if (error) throw error;
     res.json({ message: 'Reservation deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/reservations/:id/return', async (req, res) => {
+  try {
+    const { current_mileage, fuel_level, battery_level, has_issues, issues_description } = req.body;
+    const reservationId = req.params.id;
+
+    const { data: reservation, error: resError } = await supabase
+      .from('reservations')
+      .select('*, vehicles(*)')
+      .eq('id', reservationId)
+      .single();
+
+    if (resError) throw resError;
+
+    const { error: updateVehicleError } = await supabase
+      .from('vehicles')
+      .update({ 
+        mileage: current_mileage,
+        status: 'available'
+      })
+      .eq('id', reservation.vehicle_id);
+
+    if (updateVehicleError) throw updateVehicleError;
+
+    const returnNotes = `Retour - Kilométrage: ${current_mileage} km${fuel_level ? `, Essence: ${fuel_level}` : ''}${battery_level ? `, Batterie: ${battery_level}%` : ''}${has_issues ? `, Problèmes: ${issues_description}` : ''}`;
+
+    const { error: updateResError } = await supabase
+      .from('reservations')
+      .update({ 
+        status: 'completed',
+        notes: reservation.notes ? `${reservation.notes}\n\n${returnNotes}` : returnNotes
+      })
+      .eq('id', reservationId);
+
+    if (updateResError) throw updateResError;
+
+    if (has_issues && issues_description) {
+      await supabase
+        .from('maintenance')
+        .insert([{
+          vehicle_id: reservation.vehicle_id,
+          type: 'repair',
+          description: `Problèmes signalés au retour: ${issues_description}`,
+          scheduled_date: new Date().toISOString(),
+          status: 'scheduled'
+        }]);
+    }
+
+    res.json({ message: 'Vehicle returned successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

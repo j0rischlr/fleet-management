@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { Car, Calendar, Wrench, TrendingUp } from 'lucide-react'
+import DashboardCalendar from '../components/DashboardCalendar'
 
 export default function Dashboard() {
   const { profile } = useAuth()
@@ -11,6 +12,9 @@ export default function Dashboard() {
     activeReservations: 0,
     pendingMaintenance: 0,
   })
+  const [vehicles, setVehicles] = useState([])
+  const [reservations, setReservations] = useState([])
+  const [maintenance, setMaintenance] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -19,17 +23,21 @@ export default function Dashboard() {
 
   const loadStats = async () => {
     try {
-      const [vehicles, reservations, maintenance] = await Promise.all([
+      const [vehiclesData, reservationsData, maintenanceData] = await Promise.all([
         api.get('/vehicles'),
         api.get('/reservations'),
         api.get('/maintenance'),
       ])
 
+      setVehicles(vehiclesData)
+      setReservations(reservationsData)
+      setMaintenance(maintenanceData)
+
       setStats({
-        totalVehicles: vehicles.length,
-        availableVehicles: vehicles.filter((v) => v.status === 'available').length,
-        activeReservations: reservations.filter((r) => r.status === 'active' || r.status === 'approved').length,
-        pendingMaintenance: maintenance.filter((m) => m.status === 'scheduled').length,
+        totalVehicles: vehiclesData.length,
+        availableVehicles: vehiclesData.filter((v) => v.status === 'available').length,
+        activeReservations: reservationsData.filter((r) => r.status === 'active' || r.status === 'approved').length,
+        pendingMaintenance: maintenanceData.filter((m) => m.status === 'scheduled').length,
       })
     } catch (error) {
       console.error('Error loading stats:', error)
@@ -106,6 +114,14 @@ export default function Dashboard() {
             </div>
           )
         })}
+      </div>
+
+      <div className="mt-8">
+        <DashboardCalendar
+          reservations={reservations}
+          maintenance={maintenance}
+          vehicles={vehicles}
+        />
       </div>
 
       <div className="mt-8 bg-white shadow rounded-lg p-6">
