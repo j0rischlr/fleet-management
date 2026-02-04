@@ -6,6 +6,7 @@ import { Car, Plus, Edit, Trash2, Search } from 'lucide-react'
 export default function Vehicles() {
   const { isAdmin } = useAuth()
   const [vehicles, setVehicles] = useState([])
+  const [reservations, setReservations] = useState([])
   const [filteredVehicles, setFilteredVehicles] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -23,13 +24,42 @@ export default function Vehicles() {
 
   const loadVehicles = async () => {
     try {
-      const data = await api.get('/vehicles')
-      setVehicles(data)
+      const [vehiclesData, reservationsData] = await Promise.all([
+        api.get('/vehicles'),
+        api.get('/reservations')
+      ])
+      setReservations(reservationsData)
+      
+      const vehiclesWithStatus = vehiclesData.map(vehicle => ({
+        ...vehicle,
+        displayStatus: getVehicleStatus(vehicle, reservationsData)
+      }))
+      
+      setVehicles(vehiclesWithStatus)
     } catch (error) {
       console.error('Error loading vehicles:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const getVehicleStatus = (vehicle, reservationsList) => {
+    if (vehicle.status === 'maintenance' || vehicle.status === 'unavailable') {
+      return vehicle.status
+    }
+
+    const now = new Date()
+    const activeReservation = reservationsList.find(reservation => {
+      if (reservation.vehicle_id !== vehicle.id) return false
+      if (reservation.status !== 'approved' && reservation.status !== 'active') return false
+      
+      const startDate = new Date(reservation.start_date)
+      const endDate = new Date(reservation.end_date)
+      
+      return startDate <= now && endDate >= now
+    })
+
+    return activeReservation ? 'reserved' : vehicle.status
   }
 
   const filterVehicles = () => {
@@ -45,7 +75,7 @@ export default function Vehicles() {
     }
 
     if (filterStatus !== 'all') {
-      filtered = filtered.filter((v) => v.status === filterStatus)
+      filtered = filtered.filter((v) => v.displayStatus === filterStatus)
     }
 
     setFilteredVehicles(filtered)
@@ -152,8 +182,8 @@ export default function Vehicles() {
                   </h3>
                   <p className="text-sm text-gray-500">{vehicle.year}</p>
                 </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[vehicle.status]}`}>
-                  {statusLabels[vehicle.status]}
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[vehicle.displayStatus]}`}>
+                  {statusLabels[vehicle.displayStatus]}
                 </span>
               </div>
               <div className="space-y-1 text-sm text-gray-600 mb-4">

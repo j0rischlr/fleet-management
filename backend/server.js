@@ -286,6 +286,46 @@ app.put('/api/maintenance/:id', async (req, res) => {
   }
 });
 
+app.get('/api/maintenance-alerts', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('v_maintenance_alerts')
+      .select('*');
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/maintenance-alerts/vehicle/:vehicleId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('calculate_maintenance_alerts', { vehicle_uuid: req.params.vehicleId });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/maintenance-rules', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('maintenance_rules')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/profiles/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase

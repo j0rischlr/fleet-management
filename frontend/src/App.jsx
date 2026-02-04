@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Vehicles from './pages/Vehicles'
 import Reservations from './pages/Reservations'
 import Maintenance from './pages/Maintenance'
+import MaintenanceAlerts from './pages/MaintenanceAlerts'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }) {
@@ -41,6 +42,7 @@ function App() {
             <Route path="vehicles" element={<Vehicles />} />
             <Route path="reservations" element={<Reservations />} />
             <Route path="maintenance" element={<Maintenance />} />
+            <Route path="maintenance-alerts" element={<MaintenanceAlerts />} />
           </Route>
         </Routes>
       </Router>
