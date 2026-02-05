@@ -142,6 +142,44 @@ app.get('/api/reservations/user/:userId', async (req, res) => {
 
 app.post('/api/reservations', async (req, res) => {
   try {
+    const { vehicle_id, start_date, end_date } = req.body;
+
+    // Check for conflicting reservations
+    const { data: conflictingReservations, error: resError } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('vehicle_id', vehicle_id)
+      .in('status', ['pending', 'approved', 'active'])
+      .or(`and(start_date.lte.${end_date},end_date.gte.${start_date})`);
+
+    if (resError) throw resError;
+
+    if (conflictingReservations && conflictingReservations.length > 0) {
+      return res.status(409).json({ 
+        error: 'Ce véhicule est déjà réservé pour cette période.',
+        conflict: 'reservation'
+      });
+    }
+
+    // Check for conflicting maintenance
+    const { data: conflictingMaintenance, error: maintError } = await supabase
+      .from('maintenance')
+      .select('*')
+      .eq('vehicle_id', vehicle_id)
+      .in('status', ['scheduled', 'in_progress'])
+      .gte('scheduled_date', start_date)
+      .lte('scheduled_date', end_date);
+
+    if (maintError) throw maintError;
+
+    if (conflictingMaintenance && conflictingMaintenance.length > 0) {
+      return res.status(409).json({ 
+        error: 'Ce véhicule est en maintenance durant cette période.',
+        conflict: 'maintenance'
+      });
+    }
+
+    // No conflicts, create the reservation
     const { data, error } = await supabase
       .from('reservations')
       .insert([req.body])
@@ -157,6 +195,48 @@ app.post('/api/reservations', async (req, res) => {
 
 app.put('/api/reservations/:id', async (req, res) => {
   try {
+    const { vehicle_id, start_date, end_date } = req.body;
+
+    // Only check for conflicts if dates or vehicle are being changed
+    if (vehicle_id && start_date && end_date) {
+      // Check for conflicting reservations (excluding current reservation)
+      const { data: conflictingReservations, error: resError } = await supabase
+        .from('reservations')
+        .select('*')
+        .eq('vehicle_id', vehicle_id)
+        .neq('id', req.params.id)
+        .in('status', ['pending', 'approved', 'active'])
+        .or(`and(start_date.lte.${end_date},end_date.gte.${start_date})`);
+
+      if (resError) throw resError;
+
+      if (conflictingReservations && conflictingReservations.length > 0) {
+        return res.status(409).json({ 
+          error: 'Ce véhicule est déjà réservé pour cette période.',
+          conflict: 'reservation'
+        });
+      }
+
+      // Check for conflicting maintenance
+      const { data: conflictingMaintenance, error: maintError } = await supabase
+        .from('maintenance')
+        .select('*')
+        .eq('vehicle_id', vehicle_id)
+        .in('status', ['scheduled', 'in_progress'])
+        .gte('scheduled_date', start_date)
+        .lte('scheduled_date', end_date);
+
+      if (maintError) throw maintError;
+
+      if (conflictingMaintenance && conflictingMaintenance.length > 0) {
+        return res.status(409).json({ 
+          error: 'Ce véhicule est en maintenance durant cette période.',
+          conflict: 'maintenance'
+        });
+      }
+    }
+
+    // No conflicts, update the reservation
     const { data, error } = await supabase
       .from('reservations')
       .update(req.body)
@@ -228,7 +308,8 @@ app.post('/api/reservations/:id/return', async (req, res) => {
           type: 'repair',
           description: `Problèmes signalés au retour: ${issues_description}`,
           scheduled_date: new Date().toISOString(),
-          status: 'scheduled'
+          status: 'scheduled',
+          mileage_at_service: current_mileage
         }]);
     }
 

@@ -29,6 +29,38 @@ export default function MaintenanceAlerts() {
     ? alerts 
     : alerts.filter(a => a.priority === filterPriority)
 
+  // Group alerts by vehicle
+  const groupedAlerts = filteredAlerts.reduce((acc, alert) => {
+    const vehicleKey = alert.vehicle_id
+    if (!acc[vehicleKey]) {
+      acc[vehicleKey] = {
+        vehicle: {
+          id: alert.vehicle_id,
+          brand: alert.brand,
+          model: alert.model,
+          license_plate: alert.license_plate,
+          fuel_type: alert.fuel_type
+        },
+        alerts: [],
+        highestPriority: 'low'
+      }
+    }
+    acc[vehicleKey].alerts.push(alert)
+    
+    // Track highest priority for the vehicle
+    const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 }
+    if (priorityOrder[alert.priority] > priorityOrder[acc[vehicleKey].highestPriority]) {
+      acc[vehicleKey].highestPriority = alert.priority
+    }
+    
+    return acc
+  }, {})
+
+  const vehicleGroups = Object.values(groupedAlerts).sort((a, b) => {
+    const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 }
+    return priorityOrder[b.highestPriority] - priorityOrder[a.highestPriority]
+  })
+
   const priorityColors = {
     urgent: 'bg-red-100 text-red-800 border-red-200',
     high: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -127,97 +159,121 @@ export default function MaintenanceAlerts() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredAlerts.map((alert, index) => {
-            const progress = getProgressPercentage(alert)
-            return (
-              <div
-                key={index}
-                className={`bg-white shadow rounded-lg border-l-4 ${priorityColors[alert.priority]} overflow-hidden`}
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-start space-x-4 flex-1">
-                      <div className={`flex-shrink-0 ${priorityIcons[alert.priority]}`}>
-                        <AlertTriangle className="h-8 w-8" />
+        <div className="space-y-6">
+          {vehicleGroups.map((group, groupIndex) => (
+            <div
+              key={groupIndex}
+              className={`bg-white shadow rounded-lg border-l-4 ${priorityColors[group.highestPriority]} overflow-hidden`}
+            >
+              <div className="p-6">
+                {/* Vehicle Header */}
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      <div className="h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center">
+                        <Car className="h-6 w-6 text-primary-600" />
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {alert.rule_name}
-                          </h3>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${priorityColors[alert.priority]}`}>
-                            {priorityLabels[alert.priority]}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-3">{alert.description}</p>
-                        
-                        <div className="flex items-center space-x-6 text-sm">
-                          <div className="flex items-center space-x-2">
-                            <Car className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium text-gray-900">
-                              {alert.brand} {alert.model}
-                            </span>
-                            <span className="text-gray-500">({alert.license_plate})</span>
-                          </div>
-                          {alert.alert_type === 'mileage' ? (
-                            <div className="flex items-center space-x-2">
-                              <Gauge className="h-4 w-4 text-gray-400" />
-                              <span className="text-gray-700">
-                                {alert.current_value?.toLocaleString()} km / {alert.next_due_value?.toLocaleString()} km
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-4 w-4 text-gray-400" />
-                              <span className="text-gray-700">
-                                {alert.current_value} jours / {alert.next_due_value} jours
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-gray-600">{getAlertMessage(alert)}</span>
-                            <span className="font-medium text-gray-900">{Math.round(progress)}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full transition-all ${
-                                progress >= 100 ? 'bg-red-600' :
-                                progress >= 90 ? 'bg-orange-500' :
-                                progress >= 80 ? 'bg-yellow-500' :
-                                'bg-blue-500'
-                              }`}
-                              style={{ width: `${Math.min(progress, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {group.vehicle.brand} {group.vehicle.model}
+                      </h3>
+                      <p className="text-sm text-gray-500">{group.vehicle.license_plate}</p>
                     </div>
                   </div>
-
-                  {isAdmin() && (
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                      <Link
-                        to={`/vehicles`}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                      >
-                        Voir le véhicule
-                      </Link>
-                      <Link
-                        to={`/maintenance`}
-                        className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
-                      >
-                        Planifier maintenance
-                      </Link>
-                    </div>
-                  )}
+                  <div className="flex items-center space-x-2">
+                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${priorityColors[group.highestPriority]}`}>
+                      {priorityLabels[group.highestPriority]}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {group.alerts.length} alerte{group.alerts.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Alerts List */}
+                <div className="space-y-4">
+                  {group.alerts.map((alert, alertIndex) => {
+                    const progress = getProgressPercentage(alert)
+                    return (
+                      <div key={alertIndex} className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-start space-x-3">
+                          <div className={`flex-shrink-0 ${priorityIcons[alert.priority]}`}>
+                            <AlertTriangle className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <h4 className="text-sm font-semibold text-gray-900">
+                                {alert.rule_name}
+                              </h4>
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${priorityColors[alert.priority]}`}>
+                                {priorityLabels[alert.priority]}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mb-3">{alert.description}</p>
+                            
+                            <div className="flex items-center space-x-4 text-xs mb-3">
+                              {alert.alert_type === 'mileage' ? (
+                                <div className="flex items-center space-x-2">
+                                  <Gauge className="h-4 w-4 text-gray-400" />
+                                  <span className="text-gray-700">
+                                    {alert.current_value?.toLocaleString()} km / {alert.next_due_value?.toLocaleString()} km
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-2">
+                                  <Calendar className="h-4 w-4 text-gray-400" />
+                                  <span className="text-gray-700">
+                                    {alert.current_value} jours / {alert.next_due_value} jours
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="text-gray-600">{getAlertMessage(alert)}</span>
+                                <span className="font-medium text-gray-900">{Math.round(progress)}%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    progress >= 100 ? 'bg-red-600' :
+                                    progress >= 90 ? 'bg-orange-500' :
+                                    progress >= 80 ? 'bg-yellow-500' :
+                                    'bg-blue-500'
+                                  }`}
+                                  style={{ width: `${Math.min(progress, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Actions */}
+                {isAdmin() && (
+                  <div className="flex justify-end space-x-3 pt-4 mt-4 border-t border-gray-200">
+                    <Link
+                      to={`/vehicles`}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      Voir le véhicule
+                    </Link>
+                    <Link
+                      to={`/maintenance`}
+                      className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                    >
+                      Planifier maintenance
+                    </Link>
+                  </div>
+                )}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       )}
 

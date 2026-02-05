@@ -80,11 +80,13 @@ BEGIN
     AND v_record.fuel_type = ANY(fuel_types)
   LOOP
     -- Récupérer la dernière maintenance de ce type
-    SELECT MAX(completed_date), MAX(m.id) INTO last_maint_date, last_maint_mileage
+    SELECT completed_date, mileage_at_service INTO last_maint_date, last_maint_mileage
     FROM maintenance m
     WHERE m.vehicle_id = vehicle_uuid 
     AND m.status = 'completed'
-    AND m.description ILIKE '%' || r_record.name || '%';
+    AND m.description ILIKE '%' || r_record.name || '%'
+    ORDER BY completed_date DESC NULLS LAST
+    LIMIT 1;
 
     -- Alertes basées sur le kilométrage
     IF r_record.rule_type IN ('mileage', 'both') AND r_record.mileage_interval IS NOT NULL THEN

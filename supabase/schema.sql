@@ -57,6 +57,7 @@ CREATE TABLE maintenance (
   cost DECIMAL(10, 2),
   provider TEXT,
   notes TEXT,
+  mileage_at_service INTEGER,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );

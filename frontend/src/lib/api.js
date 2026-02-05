@@ -13,7 +13,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    if (!response.ok) throw new Error('API request failed')
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const error = new Error('API request failed')
+      error.response = { status: response.status, data: errorData }
+      throw error
+    }
     return response.json()
   },
 
@@ -23,7 +28,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    if (!response.ok) throw new Error('API request failed')
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const error = new Error('API request failed')
+      error.response = { status: response.status, data: errorData }
+      throw error
+    }
     return response.json()
   },
 

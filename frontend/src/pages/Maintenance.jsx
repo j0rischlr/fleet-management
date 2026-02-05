@@ -33,6 +33,22 @@ export default function Maintenance() {
       const updateData = { status: newStatus }
       if (newStatus === 'completed') {
         updateData.completed_date = new Date().toISOString()
+        
+        const record = maintenanceRecords.find(m => m.id === id)
+        const vehicle = vehicles.find(v => v.id === record?.vehicle_id)
+        
+        if (vehicle) {
+          const mileage = prompt(
+            `Kilométrage actuel du véhicule ${vehicle.brand} ${vehicle.model}:`,
+            vehicle.mileage?.toString() || '0'
+          )
+          
+          if (mileage !== null) {
+            updateData.mileage_at_service = parseInt(mileage)
+          } else {
+            return
+          }
+        }
       }
       await api.put(`/maintenance/${id}`, updateData)
       loadData()
