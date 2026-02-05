@@ -130,7 +130,7 @@ export default function MaintenanceAlerts() {
             <select
               value={filterPriority}
               onChange={(e) => setFilterPriority(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             >
               <option value="all">Toutes</option>
               <option value="urgent">Urgent</option>
@@ -171,7 +171,7 @@ export default function MaintenanceAlerts() {
                   <div className="flex items-center space-x-3">
                     <div className="flex-shrink-0">
                       <div className="h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                        <Car className="h-6 w-6 text-primary-600" />
+                        <Car className="h-6 w-6 text-primary" />
                       </div>
                     </div>
                     <div>
@@ -265,7 +265,7 @@ export default function MaintenanceAlerts() {
                     </Link>
                     <Link
                       to={`/maintenance`}
-                      className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                      className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary hover:bg-primary-600"
                     >
                       Planifier maintenance
                     </Link>

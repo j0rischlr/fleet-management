@@ -105,7 +105,7 @@ export default function Maintenance() {
         </div>
         <button
           onClick={() => openModal()}
-          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600"
         >
           <Plus className="h-4 w-4 mr-2" />
           Planifier une maintenance
@@ -274,7 +274,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
               required
               value={formData.vehicle_id}
               onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             >
               <option value="">Sélectionner un véhicule</option>
               {vehicles.map((vehicle) => (
@@ -290,7 +290,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
             <select
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             >
               <option value="routine">Entretien</option>
               <option value="repair">Réparation</option>
@@ -306,7 +306,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               placeholder="Ex: Vidange et changement des filtres"
             />
           </div>
@@ -318,7 +318,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
               required
               value={formData.scheduled_date}
               onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
 
@@ -330,7 +330,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
                 step="0.01"
                 value={formData.cost}
                 onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
             <div>
@@ -339,7 +339,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
                 type="text"
                 value={formData.provider}
                 onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
           </div>
@@ -350,7 +350,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={2}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
 
@@ -365,7 +365,7 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600 disabled:opacity-50"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer'}
             </button>

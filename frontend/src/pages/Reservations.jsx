@@ -108,7 +108,7 @@ export default function Reservations() {
         </div>
         <button
           onClick={() => openModal()}
-          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600"
         >
           <Plus className="h-4 w-4 mr-2" />
           Nouvelle réservation
@@ -125,7 +125,7 @@ export default function Reservations() {
                   <div className="flex items-start space-x-4 flex-1">
                     <div className="flex-shrink-0">
                       <div className="h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                        <Car className="h-6 w-6 text-primary-600" />
+                        <Car className="h-6 w-6 text-primary" />
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -172,7 +172,7 @@ export default function Reservations() {
                             disabled={!canReturn}
                             className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                               canReturn
-                                ? 'text-white bg-primary-600 hover:bg-primary-700 cursor-pointer'
+                                ? 'text-white bg-primary hover:bg-primary-600 cursor-pointer'
                                 : 'text-gray-400 bg-gray-200 cursor-not-allowed'
                             }`}
                             title={!canReturn ? `Disponible après le ${endDate.toLocaleString('fr-FR')}` : ''}
@@ -396,7 +396,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
               <button
                 type="button"
                 onClick={() => setShowCalendar(true)}
-                className="mb-4 inline-flex items-center px-3 py-2 text-sm font-medium text-primary-600 hover:text-primary-700"
+                className="mb-4 inline-flex items-center px-3 py-2 text-sm font-medium text-primary hover:text-primary-700"
               >
                 <Calendar className="h-4 w-4 mr-2" />
                 Voir le calendrier
@@ -409,7 +409,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
               required
               value={formData.vehicle_id}
               onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             >
               <option value="">Sélectionner un véhicule</option>
               {vehicles.map((vehicle) => (
@@ -428,7 +428,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
                 required
                 value={formData.start_date}
                 onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
             <div>
@@ -438,7 +438,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
                 required
                 value={formData.end_date}
                 onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
           </div>
@@ -449,7 +449,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
               type="text"
               value={formData.purpose}
               onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               placeholder="Ex: Déplacement professionnel"
             />
           </div>
@@ -460,7 +460,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
 
@@ -475,7 +475,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600 disabled:opacity-50"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer'}
             </button>
@@ -555,7 +555,7 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
               min={vehicle?.mileage || 0}
               value={formData.current_mileage}
               onChange={(e) => setFormData({ ...formData, current_mileage: parseInt(e.target.value) })}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               placeholder="Kilométrage actuel du véhicule"
             />
             <p className="mt-1 text-xs text-gray-500">
@@ -571,7 +571,7 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
               <select
                 value={formData.fuel_level}
                 onChange={(e) => setFormData({ ...formData, fuel_level: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               >
                 <option value="">Sélectionner</option>
                 <option value="full">Plein effectué</option>
@@ -594,7 +594,7 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
                 max="100"
                 value={formData.battery_level}
                 onChange={(e) => setFormData({ ...formData, battery_level: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
                 placeholder="0-100"
               />
             </div>
@@ -606,7 +606,7 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
                 type="checkbox"
                 checked={formData.has_issues}
                 onChange={(e) => setFormData({ ...formData, has_issues: e.target.checked })}
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
               />
               <span className="ml-2 text-sm font-medium text-gray-700">
                 Problèmes physiques constatés
@@ -624,7 +624,7 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
                 value={formData.issues_description}
                 onChange={(e) => setFormData({ ...formData, issues_description: e.target.value })}
                 rows={4}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
                 placeholder="Décrivez les problèmes constatés (rayures, chocs, pannes, etc.)"
               />
             </div>
@@ -641,7 +641,7 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600 disabled:opacity-50"
             >
               {loading ? 'Traitement...' : 'Confirmer le retour'}
             </button>

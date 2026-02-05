@@ -134,7 +134,7 @@ export default function Vehicles() {
         {isAdmin() && (
           <button
             onClick={() => openModal()}
-            className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600"
           >
             <Plus className="h-4 w-4 mr-2" />
             Ajouter un véhicule
@@ -151,13 +151,13 @@ export default function Vehicles() {
               placeholder="Rechercher par marque, modèle ou plaque..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
           >
             <option value="all">Tous les statuts</option>
             <option value="available">Disponible</option>
@@ -171,8 +171,8 @@ export default function Vehicles() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredVehicles.map((vehicle) => (
           <div key={vehicle.id} className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="h-48 bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center">
-              <Car className="h-24 w-24 text-primary-600" />
+            <div className="h-48 bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center">
+              <Car className="h-24 w-24 text-primary" />
             </div>
             <div className="p-4">
               <div className="flex items-start justify-between mb-2">
@@ -300,7 +300,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
                 required
                 value={formData.brand}
                 onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
             <div>
@@ -310,7 +310,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
                 required
                 value={formData.model}
                 onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
           </div>
@@ -323,7 +323,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
                 required
                 value={formData.year}
                 onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
             <div>
@@ -333,7 +333,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
                 required
                 value={formData.license_plate}
                 onChange={(e) => setFormData({ ...formData, license_plate: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
           </div>
@@ -344,7 +344,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
               <select
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               >
                 <option value="sedan">Berline</option>
                 <option value="suv">SUV</option>
@@ -358,7 +358,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
               <select
                 value={formData.fuel_type}
                 onChange={(e) => setFormData({ ...formData, fuel_type: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               >
                 <option value="gasoline">Essence</option>
                 <option value="diesel">Diesel</option>
@@ -375,7 +375,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
                 type="number"
                 value={formData.seats}
                 onChange={(e) => setFormData({ ...formData, seats: parseInt(e.target.value) })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
             <div>
@@ -384,7 +384,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
                 type="number"
                 value={formData.mileage}
                 onChange={(e) => setFormData({ ...formData, mileage: parseInt(e.target.value) })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               />
             </div>
             <div>
@@ -392,7 +392,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
               >
                 <option value="available">Disponible</option>
                 <option value="reserved">Réservé</option>
@@ -408,7 +408,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
 
@@ -423,7 +423,7 @@ function VehicleModal({ vehicle, onClose, onSave }) {
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600 disabled:opacity-50"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer'}
             </button>
