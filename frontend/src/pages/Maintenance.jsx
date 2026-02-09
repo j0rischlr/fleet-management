@@ -1,17 +1,34 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
-import { Wrench, Plus, Edit, Car } from 'lucide-react'
+import { Wrench, Plus, Edit, Car, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function Maintenance() {
+  const location = useLocation()
   const [maintenanceRecords, setMaintenanceRecords] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingMaintenance, setEditingMaintenance] = useState(null)
+  const [prefillData, setPrefillData] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (location.state?.vehicle_id && location.state?.alerts) {
+      setPrefillData({
+        vehicle_id: location.state.vehicle_id,
+        alerts: location.state.alerts
+      })
+      setShowModal(true)
+      // Clear navigation state to avoid re-opening on refresh
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   const loadData = async () => {
     try {
@@ -19,7 +36,12 @@ export default function Maintenance() {
         api.get('/maintenance'),
         api.get('/vehicles'),
       ])
-      setMaintenanceRecords(maintenanceData)
+      const sorted = maintenanceData.sort((a, b) => {
+        const dateA = new Date(a.completed_date || a.scheduled_date)
+        const dateB = new Date(b.completed_date || b.scheduled_date)
+        return dateB - dateA
+      })
+      setMaintenanceRecords(sorted)
       setVehicles(vehiclesData)
     } catch (error) {
       console.error('Error loading data:', error)
@@ -64,6 +86,7 @@ export default function Maintenance() {
 
   const closeModal = () => {
     setEditingMaintenance(null)
+    setPrefillData(null)
     setShowModal(false)
   }
 
@@ -114,7 +137,7 @@ export default function Maintenance() {
 
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <ul className="divide-y divide-gray-200">
-          {maintenanceRecords.map((record) => {
+          {maintenanceRecords.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((record) => {
             const vehicle = record.vehicles
             return (
               <li key={record.id} className="p-6 hover:bg-gray-50">
@@ -164,15 +187,7 @@ export default function Maintenance() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {record.status === 'scheduled' && (
-                      <button
-                        onClick={() => handleStatusChange(record.id, 'in_progress')}
-                        className="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100"
-                      >
-                        Démarrer
-                      </button>
-                    )}
-                    {record.status === 'in_progress' && (
+                    {(record.status === 'scheduled' || record.status === 'in_progress') && (
                       <button
                         onClick={() => handleStatusChange(record.id, 'completed')}
                         className="px-3 py-1 text-sm font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100"
@@ -196,6 +211,37 @@ export default function Maintenance() {
         </ul>
       </div>
 
+      {maintenanceRecords.length > itemsPerPage && (
+        <div className="flex items-center justify-between mt-4 bg-white px-4 py-3 rounded-lg shadow sm:px-6">
+          <div className="text-sm text-gray-700">
+            Affichage de <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> à{' '}
+            <span className="font-medium">{Math.min(currentPage * itemsPerPage, maintenanceRecords.length)}</span> sur{' '}
+            <span className="font-medium">{maintenanceRecords.length}</span> maintenances
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Précédent
+            </button>
+            <span className="text-sm text-gray-700">
+              Page {currentPage} / {Math.ceil(maintenanceRecords.length / itemsPerPage)}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(maintenanceRecords.length / itemsPerPage), p + 1))}
+              disabled={currentPage >= Math.ceil(maintenanceRecords.length / itemsPerPage)}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Suivant
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {maintenanceRecords.length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <Wrench className="mx-auto h-12 w-12 text-gray-400" />
@@ -208,6 +254,7 @@ export default function Maintenance() {
         <MaintenanceModal
           maintenance={editingMaintenance}
           vehicles={vehicles}
+          prefillData={prefillData}
           onClose={closeModal}
           onSave={() => {
             loadData()
@@ -219,9 +266,22 @@ export default function Maintenance() {
   )
 }
 
-function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
-  const [formData, setFormData] = useState(
-    maintenance || {
+function MaintenanceModal({ maintenance, vehicles, prefillData, onClose, onSave }) {
+  const getInitialFormData = () => {
+    if (maintenance) return maintenance
+    if (prefillData) {
+      return {
+        vehicle_id: prefillData.vehicle_id,
+        type: 'routine',
+        description: prefillData.alerts[0]?.rule_name || '',
+        scheduled_date: '',
+        status: 'scheduled',
+        cost: '',
+        provider: '',
+        notes: '',
+      }
+    }
+    return {
       vehicle_id: '',
       type: 'routine',
       description: '',
@@ -231,7 +291,9 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
       provider: '',
       notes: '',
     }
-  )
+  }
+
+  const [formData, setFormData] = useState(getInitialFormData())
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -301,14 +363,29 @@ function MaintenanceModal({ maintenance, vehicles, onClose, onSave }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700">Description</label>
-            <textarea
-              required
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-              placeholder="Ex: Vidange et changement des filtres"
-            />
+            {prefillData && prefillData.alerts.length > 0 ? (
+              <select
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              >
+                {prefillData.alerts.map((alert, idx) => (
+                  <option key={idx} value={alert.rule_name}>
+                    {alert.rule_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <textarea
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                placeholder="Ex: Vidange et changement des filtres"
+              />
+            )}
           </div>
 
           <div>

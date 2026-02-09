@@ -16,6 +16,33 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Email notification config
+const ALERT_EMAILS = (process.env.ALERT_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+const EDGE_FUNCTION_URL = process.env.SUPABASE_EDGE_FUNCTION_URL;
+
+async function sendAlertEmail(to, subject, html) {
+  if (!EDGE_FUNCTION_URL) {
+    console.warn('SUPABASE_EDGE_FUNCTION_URL not configured, skipping email');
+    return;
+  }
+  try {
+    const response = await fetch(EDGE_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+      },
+      body: JSON.stringify({ to, subject, html }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('Email send error:', err);
+    }
+  } catch (error) {
+    console.error('Failed to send email:', error.message);
+  }
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Fleet Management API' });
 });
@@ -357,10 +384,21 @@ app.put('/api/maintenance/:id', async (req, res) => {
       .from('maintenance')
       .update(req.body)
       .eq('id', req.params.id)
-      .select()
+      .select('*, vehicles(*)')
       .single();
 
     if (error) throw error;
+
+    // Update vehicle mileage when maintenance is completed with mileage_at_service
+    if (req.body.status === 'completed' && req.body.mileage_at_service) {
+      const { error: vehicleError } = await supabase
+        .from('vehicles')
+        .update({ mileage: req.body.mileage_at_service })
+        .eq('id', data.vehicle_id);
+
+      if (vehicleError) throw vehicleError;
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -375,6 +413,71 @@ app.get('/api/maintenance-alerts', async (req, res) => {
 
     if (error) throw error;
     res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/maintenance-alerts/notify', async (req, res) => {
+  try {
+    if (ALERT_EMAILS.length === 0) {
+      return res.status(400).json({ error: 'Aucune adresse email configurée.' });
+    }
+
+    const { data: alerts, error } = await supabase
+      .from('v_maintenance_alerts')
+      .select('*');
+
+    if (error) throw error;
+
+    const urgentAlerts = alerts.filter(a => a.priority === 'urgent' || a.priority === 'high');
+
+    if (urgentAlerts.length === 0) {
+      return res.json({ message: 'Aucune alerte urgente à notifier.', sent: false });
+    }
+
+    const alertRows = urgentAlerts.map(a => {
+      const priority = a.priority === 'urgent' ? '🔴 Urgent' : '🟠 Haute';
+      return `<tr>
+        <td style="padding:8px;border:1px solid #ddd;">${a.vehicle_brand || ''} ${a.vehicle_model || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${a.license_plate || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${a.rule_name || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${a.description || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${priority}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;">
+        <div style="background:#c05c4f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+          <h1 style="margin:0;font-size:22px;">⚠️ Alertes de maintenance - Fleet Manager</h1>
+        </div>
+        <div style="padding:20px;background:#faf3f2;border-radius:0 0 8px 8px;">
+          <p style="color:#0d0604;"><strong>${urgentAlerts.length}</strong> alerte(s) nécessitent votre attention :</p>
+          <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+            <thead>
+              <tr style="background:#c05c4f;color:white;">
+                <th style="padding:8px;text-align:left;">Véhicule</th>
+                <th style="padding:8px;text-align:left;">Plaque</th>
+                <th style="padding:8px;text-align:left;">Type</th>
+                <th style="padding:8px;text-align:left;">Description</th>
+                <th style="padding:8px;text-align:left;">Priorité</th>
+              </tr>
+            </thead>
+            <tbody>${alertRows}</tbody>
+          </table>
+          <p style="margin-top:20px;color:#666;font-size:13px;">Connectez-vous à Fleet Manager pour planifier les maintenances nécessaires.</p>
+        </div>
+      </div>
+    `;
+
+    const subject = `⚠️ ${urgentAlerts.length} alerte(s) de maintenance - Fleet Manager`;
+
+    await Promise.all(
+      ALERT_EMAILS.map(email => sendAlertEmail(email, subject, html))
+    );
+
+    res.json({ message: `Notifications envoyées à ${ALERT_EMAILS.length} destinataire(s).`, sent: true, alertCount: urgentAlerts.length });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -438,6 +541,85 @@ app.put('/api/profiles/:userId', async (req, res) => {
   }
 });
 
+// Track notified alerts to avoid duplicate emails
+const notifiedAlerts = new Set();
+
+async function checkAndNotifyAlerts() {
+  if (ALERT_EMAILS.length === 0 || !EDGE_FUNCTION_URL) return;
+
+  try {
+    const { data: alerts, error } = await supabase
+      .from('v_maintenance_alerts')
+      .select('*');
+
+    if (error) {
+      console.error('Error fetching alerts:', error.message);
+      return;
+    }
+
+    // Filter only urgent/high alerts that haven't been notified yet
+    const newAlerts = alerts.filter(a => 
+      (a.priority === 'urgent' || a.priority === 'high') &&
+      !notifiedAlerts.has(`${a.vehicle_id}-${a.rule_name}`)
+    );
+
+    if (newAlerts.length === 0) return;
+
+    const alertRows = newAlerts.map(a => {
+      const priority = a.priority === 'urgent' ? '🔴 Urgent' : '🟠 Haute';
+      return `<tr>
+        <td style="padding:8px;border:1px solid #ddd;">${a.vehicle_brand || ''} ${a.vehicle_model || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${a.license_plate || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${a.rule_name || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${a.description || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;">${priority}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;">
+        <div style="background:#c05c4f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+          <h1 style="margin:0;font-size:22px;">🚨 Nouvelles alertes de maintenance - Fleet Manager</h1>
+        </div>
+        <div style="padding:20px;background:#faf3f2;border-radius:0 0 8px 8px;">
+          <p style="color:#0d0604;"><strong>${newAlerts.length}</strong> nouvelle(s) alerte(s) détectée(s) :</p>
+          <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+            <thead>
+              <tr style="background:#c05c4f;color:white;">
+                <th style="padding:8px;text-align:left;">Véhicule</th>
+                <th style="padding:8px;text-align:left;">Plaque</th>
+                <th style="padding:8px;text-align:left;">Type</th>
+                <th style="padding:8px;text-align:left;">Description</th>
+                <th style="padding:8px;text-align:left;">Priorité</th>
+              </tr>
+            </thead>
+            <tbody>${alertRows}</tbody>
+          </table>
+          <p style="margin-top:20px;color:#666;font-size:13px;">Connectez-vous à Fleet Manager pour planifier les maintenances nécessaires.</p>
+        </div>
+      </div>
+    `;
+
+    const subject = `🚨 ${newAlerts.length} nouvelle(s) alerte(s) de maintenance - Fleet Manager`;
+
+    await Promise.all(
+      ALERT_EMAILS.map(email => sendAlertEmail(email, subject, html))
+    );
+
+    // Mark these alerts as notified
+    newAlerts.forEach(a => notifiedAlerts.add(`${a.vehicle_id}-${a.rule_name}`));
+    console.log(`[Auto-notify] ${newAlerts.length} nouvelle(s) alerte(s) envoyée(s) à ${ALERT_EMAILS.join(', ')}`);
+  } catch (error) {
+    console.error('[Auto-notify] Error:', error.message);
+  }
+}
+
+// Check alerts every 30 minutes
+const ALERT_CHECK_INTERVAL = 30 * 60 * 1000;
+setInterval(checkAndNotifyAlerts, ALERT_CHECK_INTERVAL);
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  // Initial check 10 seconds after startup
+  setTimeout(checkAndNotifyAlerts, 10000);
 });
