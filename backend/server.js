@@ -510,6 +510,20 @@ app.get('/api/maintenance-rules', async (req, res) => {
   }
 });
 
+app.get('/api/profiles', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('full_name');
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/profiles/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase

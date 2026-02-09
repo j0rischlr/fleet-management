@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle } from 'lucide-react'
+import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle, Users } from 'lucide-react'
 import ReservationCalendar from '../components/ReservationCalendar'
 
 export default function Reservations() {
@@ -13,6 +13,8 @@ export default function Reservations() {
   const [editingReservation, setEditingReservation] = useState(null)
   const [showReturnModal, setShowReturnModal] = useState(false)
   const [returningReservation, setReturningReservation] = useState(null)
+  const [profiles, setProfiles] = useState([])
+  const [filterUserId, setFilterUserId] = useState('all')
 
   useEffect(() => {
     loadData()
@@ -20,12 +22,15 @@ export default function Reservations() {
 
   const loadData = async () => {
     try {
-      const [reservationsData, vehiclesData] = await Promise.all([
+      const promises = [
         isAdmin() ? api.get('/reservations') : api.get(`/reservations/user/${user.id}`),
         api.get('/vehicles'),
-      ])
-      setReservations(reservationsData)
-      setVehicles(vehiclesData)
+      ]
+      if (isAdmin()) promises.push(api.get('/profiles'))
+      const results = await Promise.all(promises)
+      setReservations(results[0])
+      setVehicles(results[1])
+      if (results[2]) setProfiles(results[2])
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -115,9 +120,35 @@ export default function Reservations() {
         </button>
       </div>
 
+      {isAdmin() && (
+        <div className="bg-white shadow rounded-lg p-4 mb-6">
+          <div className="flex items-center space-x-4">
+            <Users className="h-5 w-5 text-gray-400" />
+            <label className="text-sm font-medium text-gray-700">Filtrer par utilisateur :</label>
+            <select
+              value={filterUserId}
+              onChange={(e) => setFilterUserId(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary text-sm"
+            >
+              <option value="all">Tous les utilisateurs</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.full_name || profile.email}
+                </option>
+              ))}
+            </select>
+            {filterUserId !== 'all' && (
+              <span className="text-sm text-gray-500">
+                {reservations.filter(r => r.user_id === filterUserId).length} réservation(s)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <ul className="divide-y divide-gray-200">
-          {reservations.map((reservation) => {
+          {reservations.filter(r => filterUserId === 'all' || r.user_id === filterUserId).map((reservation) => {
             const vehicle = reservation.vehicles
             return (
               <li key={reservation.id} className="p-6 hover:bg-gray-50">
@@ -223,7 +254,7 @@ export default function Reservations() {
         </ul>
       </div>
 
-      {reservations.length === 0 && (
+      {reservations.filter(r => filterUserId === 'all' || r.user_id === filterUserId).length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <Calendar className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Aucune réservation</h3>
