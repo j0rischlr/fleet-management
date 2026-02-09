@@ -81,6 +81,13 @@ export const AuthProvider = ({ children }) => {
     setProfile(null)
   }
 
+  const resetPassword = async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (error) throw error
+  }
+
   const isAdmin = () => {
     return profile?.role === 'admin'
   }
@@ -92,6 +99,7 @@ export const AuthProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    resetPassword,
     isAdmin,
   }
 

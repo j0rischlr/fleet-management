@@ -79,6 +79,8 @@ app.get('/api/vehicles/:id', async (req, res) => {
 app.post('/api/vehicles', async (req, res) => {
   try {
     const vehicleData = { ...req.body };
+    const maintenanceUpToDate = vehicleData.maintenance_up_to_date;
+    delete vehicleData.maintenance_up_to_date;
     if (vehicleData.vin === '') vehicleData.vin = null;
     if (vehicleData.color === '') vehicleData.color = null;
     if (vehicleData.notes === '') vehicleData.notes = null;
@@ -90,6 +92,40 @@ app.post('/api/vehicles', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // If maintenance is up to date, create baseline maintenance records
+    if (maintenanceUpToDate && data.mileage > 0) {
+      try {
+        const { data: rules, error: rulesError } = await supabase
+          .from('maintenance_rules')
+          .select('*')
+          .eq('is_active', true);
+
+        if (!rulesError && rules) {
+          const applicableRules = rules.filter(r => r.fuel_types.includes(data.fuel_type));
+          const now = new Date().toISOString();
+
+          const maintenanceRecords = applicableRules.map(rule => ({
+            vehicle_id: data.id,
+            type: 'routine',
+            description: `${rule.name} - État initial (maintenance à jour à l'ajout)`,
+            scheduled_date: now,
+            completed_date: now,
+            status: 'completed',
+            mileage_at_service: data.mileage,
+            notes: 'Enregistrement automatique - maintenance déclarée à jour lors de l\'ajout du véhicule',
+          }));
+
+          if (maintenanceRecords.length > 0) {
+            await supabase.from('maintenance').insert(maintenanceRecords);
+            console.log(`[Vehicle] Created ${maintenanceRecords.length} baseline maintenance records for ${data.brand} ${data.model}`);
+          }
+        }
+      } catch (maintError) {
+        console.error('Error creating baseline maintenance records:', maintError.message);
+      }
+    }
+
     res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -102,6 +138,11 @@ app.put('/api/vehicles/:id', async (req, res) => {
     if (vehicleData.vin === '') vehicleData.vin = null;
     if (vehicleData.color === '') vehicleData.color = null;
     if (vehicleData.notes === '') vehicleData.notes = null;
+    if (vehicleData.insurance_provider === '') vehicleData.insurance_provider = null;
+    if (vehicleData.insurance_policy_number === '') vehicleData.insurance_policy_number = null;
+    if (vehicleData.insurance_expiry_date === '') vehicleData.insurance_expiry_date = null;
+    if (vehicleData.last_technical_inspection === '') vehicleData.last_technical_inspection = null;
+    delete vehicleData.displayStatus;
     
     const { data, error } = await supabase
       .from('vehicles')
@@ -140,6 +181,24 @@ app.get('/api/reservations', async (req, res) => {
         vehicles (*),
         profiles (*)
       `)
+      .order('start_date', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reservations/vehicle/:vehicleId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('reservations')
+      .select(`
+        *,
+        profiles (*)
+      `)
+      .eq('vehicle_id', req.params.vehicleId)
       .order('start_date', { ascending: false });
 
     if (error) throw error;
@@ -405,14 +464,138 @@ app.put('/api/maintenance/:id', async (req, res) => {
   }
 });
 
-app.get('/api/maintenance-alerts', async (req, res) => {
+// Fuel costs endpoints
+app.get('/api/fuel-costs/vehicle/:vehicleId', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('v_maintenance_alerts')
-      .select('*');
+      .from('fuel_costs')
+      .select('*, profiles(full_name, email)')
+      .eq('vehicle_id', req.params.vehicleId)
+      .order('date', { ascending: false });
 
     if (error) throw error;
     res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/fuel-costs', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('fuel_costs')
+      .insert(req.body)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/fuel-costs/:id', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('fuel_costs')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+function getDocumentAlerts(vehicles) {
+  const alerts = [];
+  const now = new Date();
+  const threeMonths = 90 * 24 * 60 * 60 * 1000;
+
+  for (const v of vehicles) {
+    // Insurance expiry check
+    if (v.insurance_expiry_date) {
+      const expiryDate = new Date(v.insurance_expiry_date);
+      const daysUntil = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
+      if (daysUntil <= 90) {
+        let priority = 'normal';
+        if (daysUntil < 0) priority = 'urgent';
+        else if (daysUntil <= 30) priority = 'high';
+
+        alerts.push({
+          vehicle_id: v.id,
+          brand: v.brand,
+          vehicle_brand: v.brand,
+          model: v.model,
+          vehicle_model: v.model,
+          license_plate: v.license_plate,
+          fuel_type: v.fuel_type,
+          rule_name: 'Assurance véhicule',
+          description: daysUntil < 0
+            ? `Assurance expirée depuis ${Math.abs(daysUntil)} jours (${v.insurance_provider || 'N/A'})`
+            : `Assurance expire dans ${daysUntil} jours (${v.insurance_provider || 'N/A'})`,
+          priority,
+          alert_type: 'date',
+          days_until_due: daysUntil,
+          current_value: Math.max(90 - daysUntil, 0),
+          next_due_value: 90,
+          source: 'document',
+        });
+      }
+    }
+
+    // Technical inspection check (valid 2 years)
+    if (v.last_technical_inspection) {
+      const lastDate = new Date(v.last_technical_inspection);
+      const nextDate = new Date(lastDate);
+      nextDate.setFullYear(nextDate.getFullYear() + 2);
+      const daysUntil = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
+      if (daysUntil <= 90) {
+        let priority = 'normal';
+        if (daysUntil < 0) priority = 'urgent';
+        else if (daysUntil <= 30) priority = 'high';
+
+        alerts.push({
+          vehicle_id: v.id,
+          brand: v.brand,
+          vehicle_brand: v.brand,
+          model: v.model,
+          vehicle_model: v.model,
+          license_plate: v.license_plate,
+          fuel_type: v.fuel_type,
+          rule_name: 'Contrôle technique',
+          description: daysUntil < 0
+            ? `Contrôle technique expiré depuis ${Math.abs(daysUntil)} jours`
+            : `Contrôle technique expire dans ${daysUntil} jours`,
+          priority,
+          alert_type: 'date',
+          days_until_due: daysUntil,
+          current_value: Math.max(90 - daysUntil, 0),
+          next_due_value: 90,
+          source: 'document',
+        });
+      }
+    }
+  }
+  return alerts;
+}
+
+app.get('/api/maintenance-alerts', async (req, res) => {
+  try {
+    const [alertsResult, vehiclesResult] = await Promise.all([
+      supabase.from('v_maintenance_alerts').select('*'),
+      supabase.from('vehicles').select('*'),
+    ]);
+
+    if (alertsResult.error) throw alertsResult.error;
+    if (vehiclesResult.error) throw vehiclesResult.error;
+
+    const maintenanceAlerts = alertsResult.data || [];
+    const documentAlerts = getDocumentAlerts(vehiclesResult.data || []);
+
+    res.json([...maintenanceAlerts, ...documentAlerts]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -510,6 +693,22 @@ app.get('/api/maintenance-rules', async (req, res) => {
   }
 });
 
+app.post('/api/check-email', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) throw error;
+    res.json({ exists: !!data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/profiles', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -562,17 +761,23 @@ async function checkAndNotifyAlerts() {
   if (ALERT_EMAILS.length === 0 || !EDGE_FUNCTION_URL) return;
 
   try {
-    const { data: alerts, error } = await supabase
-      .from('v_maintenance_alerts')
-      .select('*');
+    const [alertsResult, vehiclesResult] = await Promise.all([
+      supabase.from('v_maintenance_alerts').select('*'),
+      supabase.from('vehicles').select('*'),
+    ]);
 
-    if (error) {
-      console.error('Error fetching alerts:', error.message);
+    if (alertsResult.error) {
+      console.error('Error fetching alerts:', alertsResult.error.message);
       return;
     }
 
+    const allAlerts = [
+      ...(alertsResult.data || []),
+      ...getDocumentAlerts(vehiclesResult.data || []),
+    ];
+
     // Filter only urgent/high alerts that haven't been notified yet
-    const newAlerts = alerts.filter(a => 
+    const newAlerts = allAlerts.filter(a => 
       (a.priority === 'urgent' || a.priority === 'high') &&
       !notifiedAlerts.has(`${a.vehicle_id}-${a.rule_name}`)
     );

@@ -527,6 +527,8 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
     battery_level: '',
     has_issues: false,
     issues_description: '',
+    fuel_cost: '',
+    fuel_liters: '',
   })
   const [loading, setLoading] = useState(false)
 
@@ -536,6 +538,19 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
 
     try {
       await api.post(`/reservations/${reservation.id}/return`, formData)
+
+      // Save fuel cost if provided
+      if (formData.fuel_cost && parseFloat(formData.fuel_cost) > 0) {
+        await api.post('/fuel-costs', {
+          vehicle_id: vehicle.id,
+          reservation_id: reservation.id,
+          user_id: reservation.user_id,
+          amount: parseFloat(formData.fuel_cost),
+          liters: formData.fuel_liters ? parseFloat(formData.fuel_liters) : null,
+          mileage_at_fill: formData.current_mileage,
+        })
+      }
+
       onSave()
     } catch (error) {
       console.error('Error returning vehicle:', error)
@@ -628,6 +643,39 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
                 placeholder="0-100"
               />
+            </div>
+          )}
+
+          {isFuelVehicle && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Coût du carburant (€)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.fuel_cost}
+                  onChange={(e) => setFormData({ ...formData, fuel_cost: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                  placeholder="Ex: 65.50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Litres
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={formData.fuel_liters}
+                  onChange={(e) => setFormData({ ...formData, fuel_liters: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                  placeholder="Ex: 40.5"
+                />
+              </div>
             </div>
           )}
 

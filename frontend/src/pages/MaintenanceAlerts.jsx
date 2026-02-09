@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { AlertTriangle, Car, Calendar, Gauge, CheckCircle } from 'lucide-react'
+import { AlertTriangle, Car, Calendar, Gauge, CheckCircle, Shield } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 export default function MaintenanceAlerts() {
@@ -304,6 +304,14 @@ export default function MaintenanceAlerts() {
           <li className="flex items-start">
             <span className="mr-2">•</span>
             <span><strong>Hybride:</strong> Maintenance obligatoire tous les 15 000 km</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2">•</span>
+            <span><strong>Assurance:</strong> Alerte 3 mois avant l'expiration du contrat</span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2">•</span>
+            <span><strong>Contrôle technique:</strong> Alerte 3 mois avant l'échéance (validité 2 ans)</span>
           </li>
         </ul>
       </div>

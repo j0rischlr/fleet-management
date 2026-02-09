@@ -8,6 +8,7 @@ import Vehicles from './pages/Vehicles'
 import Reservations from './pages/Reservations'
 import Maintenance from './pages/Maintenance'
 import MaintenanceAlerts from './pages/MaintenanceAlerts'
+import ResetPassword from './pages/ResetPassword'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }) {
@@ -46,6 +47,7 @@ function App() {
           <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/dashboard"
             element={
