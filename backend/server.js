@@ -279,6 +279,39 @@ app.post('/api/reservations', async (req, res) => {
   }
 });
 
+// Get unread notification count for a user
+app.get('/api/reservations/notifications/:userId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('id, status')
+      .eq('user_id', req.params.userId)
+      .eq('user_notified', false);
+
+    if (error) throw error;
+    res.json({ count: data.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Mark all notifications as read for a user
+app.put('/api/reservations/notifications/:userId/read', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('reservations')
+      .update({ user_notified: true })
+      .eq('user_id', req.params.userId)
+      .eq('user_notified', false)
+      .select();
+
+    if (error) throw error;
+    res.json({ updated: data.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/reservations/:id', async (req, res) => {
   try {
     const { vehicle_id, start_date, end_date } = req.body;
@@ -331,6 +364,17 @@ app.put('/api/reservations/:id', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Notify user (non-blocking, won't fail if column doesn't exist)
+    if (req.body.status === 'approved' || req.body.status === 'cancelled') {
+      supabase
+        .from('reservations')
+        .update({ user_notified: false })
+        .eq('id', req.params.id)
+        .then(() => {})
+        .catch(() => {});
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });

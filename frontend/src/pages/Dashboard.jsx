@@ -127,17 +127,38 @@ export default function Dashboard() {
       <div className="mt-8 bg-white shadow rounded-lg p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Aperçu rapide</h2>
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div>
-              <p className="text-sm font-medium text-gray-900">Taux d'utilisation</p>
-              <p className="text-sm text-gray-500">
-                {stats.totalVehicles > 0
-                  ? Math.round(((stats.totalVehicles - stats.availableVehicles) / stats.totalVehicles) * 100)
-                  : 0}
-                % des véhicules sont actuellement utilisés
-              </p>
-            </div>
-          </div>
+          {(() => {
+            const now = new Date()
+            const usedVehicleIds = new Set(
+              reservations
+                .filter(r => {
+                  if (r.status !== 'active' && r.status !== 'approved') return false
+                  return new Date(r.start_date) <= now && new Date(r.end_date) >= now
+                })
+                .map(r => r.vehicle_id)
+            )
+            const usedCount = usedVehicleIds.size
+            const usagePercent = stats.totalVehicles > 0
+              ? Math.round((usedCount / stats.totalVehicles) * 100)
+              : 0
+            return (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-900">Taux d'utilisation</p>
+                  <span className="text-sm font-semibold text-primary">{usagePercent}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                  <div
+                    className="bg-primary h-2.5 rounded-full transition-all duration-500"
+                    style={{ width: `${usagePercent}%` }}
+                  ></div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {usedCount} / {stats.totalVehicles} véhicule(s) actuellement en location
+                </p>
+              </div>
+            )
+          })()}
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
             <div>
               <p className="text-sm font-medium text-gray-900">État de la flotte</p>

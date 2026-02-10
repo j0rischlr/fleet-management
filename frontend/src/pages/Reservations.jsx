@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle, Users } from 'lucide-react'
+import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle, Users, CalendarDays } from 'lucide-react'
 import ReservationCalendar from '../components/ReservationCalendar'
 
 export default function Reservations() {
@@ -306,6 +306,7 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [selectedCalEvent, setSelectedCalEvent] = useState(null)
 
   const handleCalendarSelect = (slotInfo) => {
     const startDate = new Date(slotInfo.start)
@@ -329,8 +330,23 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
   }
 
   const handleEventClick = (event) => {
-    const res = event.resource
-    alert(`Réservation: ${res.vehicle?.brand} ${res.vehicle?.model}\nStatut: ${res.status}\nDu: ${new Date(res.start_date).toLocaleString('fr-FR')}\nAu: ${new Date(res.end_date).toLocaleString('fr-FR')}`)
+    setSelectedCalEvent(event.resource)
+  }
+
+  const calStatusLabels = {
+    pending: 'En attente',
+    approved: 'Approuvée',
+    active: 'Active',
+    completed: 'Terminée',
+    cancelled: 'Annulée',
+  }
+
+  const calStatusColors = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    approved: 'bg-blue-100 text-blue-800',
+    active: 'bg-green-100 text-green-800',
+    completed: 'bg-gray-100 text-gray-800',
+    cancelled: 'bg-red-100 text-red-800',
   }
 
   const handleSubmit = async (e) => {
@@ -512,6 +528,98 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
             </button>
           </div>
         </form>
+          </div>
+        )}
+
+        {selectedCalEvent && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 z-[60] flex items-center justify-center p-4" onClick={() => setSelectedCalEvent(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className={`px-6 py-4 ${selectedCalEvent.status === 'active' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : selectedCalEvent.status === 'pending' ? 'bg-gradient-to-r from-yellow-500 to-amber-500' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="h-10 w-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                      <Car className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">Réservation</h3>
+                      <p className="text-sm text-white text-opacity-80">
+                        {selectedCalEvent.vehicle?.brand} {selectedCalEvent.vehicle?.model}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedCalEvent(null)} className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5 transition-colors">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Statut</span>
+                  <span className={`px-3 py-1 text-xs font-semibold rounded-full ${calStatusColors[selectedCalEvent.status] || 'bg-gray-100 text-gray-800'}`}>
+                    {calStatusLabels[selectedCalEvent.status] || selectedCalEvent.status}
+                  </span>
+                </div>
+
+                {selectedCalEvent.vehicle?.license_plate && (
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Car className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{selectedCalEvent.vehicle.brand} {selectedCalEvent.vehicle.model}</p>
+                      <p className="text-xs text-gray-500">{selectedCalEvent.vehicle.license_plate}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <CalendarDays className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div>
+                      <span className="text-xs text-gray-500">Du </span>
+                      <span className="text-sm font-medium text-gray-900">{new Date(selectedCalEvent.start_date).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500">Au </span>
+                      <span className="text-sm font-medium text-gray-900">{new Date(selectedCalEvent.end_date).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedCalEvent.profiles && (
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Users className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{selectedCalEvent.profiles.full_name || 'Utilisateur'}</p>
+                      {selectedCalEvent.profiles.email && (
+                        <p className="text-xs text-gray-500">{selectedCalEvent.profiles.email}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCalEvent.purpose && (
+                  <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <CheckCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs text-gray-500">Motif</span>
+                      <p className="text-sm text-gray-900">{selectedCalEvent.purpose}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                <button
+                  onClick={() => setSelectedCalEvent(null)}
+                  className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -9,14 +9,25 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
+  const [userNotifCount, setUserNotifCount] = useState(0)
 
   useEffect(() => {
     if (isAdmin()) {
       loadNotifications()
       const interval = setInterval(loadNotifications, 30000)
       return () => clearInterval(interval)
+    } else if (user) {
+      loadUserNotifications()
+      const interval = setInterval(loadUserNotifications, 30000)
+      return () => clearInterval(interval)
     }
-  }, [isAdmin])
+  }, [isAdmin, user])
+
+  useEffect(() => {
+    if (!isAdmin() && user && location.pathname === '/dashboard/reservations') {
+      markUserNotificationsRead()
+    }
+  }, [location.pathname, user])
 
   const loadNotifications = async () => {
     try {
@@ -25,6 +36,24 @@ export default function Layout() {
       setPendingCount(pendingReservations)
     } catch (error) {
       console.error('Error loading notifications:', error)
+    }
+  }
+
+  const loadUserNotifications = async () => {
+    try {
+      const result = await api.get(`/reservations/notifications/${user.id}`)
+      setUserNotifCount(result.count)
+    } catch (error) {
+      console.error('Error loading user notifications:', error)
+    }
+  }
+
+  const markUserNotificationsRead = async () => {
+    try {
+      await api.put(`/reservations/notifications/${user.id}/read`)
+      setUserNotifCount(0)
+    } catch (error) {
+      console.error('Error marking notifications as read:', error)
     }
   }
 
@@ -63,7 +92,10 @@ export default function Layout() {
                 {navigation.map((item) => {
                   const Icon = item.icon
                   const isActive = location.pathname === item.href
-                  const showBadge = item.href === '/dashboard/reservations' && isAdmin() && pendingCount > 0
+                  const showAdminBadge = item.href === '/dashboard/reservations' && isAdmin() && pendingCount > 0
+                  const showUserBadge = item.href === '/dashboard/reservations' && !isAdmin() && userNotifCount > 0
+                  const showBadge = showAdminBadge || showUserBadge
+                  const badgeCount = showAdminBadge ? pendingCount : userNotifCount
                   return (
                     <Link
                       key={item.name}
@@ -78,7 +110,7 @@ export default function Layout() {
                       {item.name}
                       {showBadge && (
                         <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-red-600 rounded-full">
-                          {pendingCount}
+                          {badgeCount}
                         </span>
                       )}
                     </Link>
