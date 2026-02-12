@@ -51,7 +51,7 @@ app.get('/api/vehicles', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('vehicles')
-      .select('*')
+      .select('*, assigned_user:profiles!assigned_user_id(id, full_name, email)')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -65,8 +65,25 @@ app.get('/api/vehicles/:id', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('vehicles')
-      .select('*')
+      .select('*, assigned_user:profiles!assigned_user_id(id, full_name, email)')
       .eq('id', req.params.id)
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/vehicles/:id/assign', async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    const { data, error } = await supabase
+      .from('vehicles')
+      .update({ assigned_user_id: user_id || null })
+      .eq('id', req.params.id)
+      .select('*, assigned_user:profiles!assigned_user_id(id, full_name, email)')
       .single();
 
     if (error) throw error;
@@ -397,7 +414,7 @@ app.delete('/api/reservations/:id', async (req, res) => {
 
 app.post('/api/reservations/:id/return', async (req, res) => {
   try {
-    const { current_mileage, fuel_level, battery_level, has_issues, issues_description } = req.body;
+    const { current_mileage, fuel_level, battery_level, has_issues, issues_description, parking_cost, toll_cost } = req.body;
     const reservationId = req.params.id;
 
     const { data: reservation, error: resError } = await supabase
@@ -418,14 +435,19 @@ app.post('/api/reservations/:id/return', async (req, res) => {
 
     if (updateVehicleError) throw updateVehicleError;
 
-    const returnNotes = `Retour - Kilométrage: ${current_mileage} km${fuel_level ? `, Essence: ${fuel_level}` : ''}${battery_level ? `, Batterie: ${battery_level}%` : ''}${has_issues ? `, Problèmes: ${issues_description}` : ''}`;
+    const returnNotes = `Retour - Kilométrage: ${current_mileage} km${fuel_level ? `, Essence: ${fuel_level}` : ''}${battery_level ? `, Batterie: ${battery_level}%` : ''}${parking_cost ? `, Parking: ${parking_cost}€` : ''}${toll_cost ? `, Péage: ${toll_cost}€` : ''}${has_issues ? `, Problèmes: ${issues_description}` : ''}`;
+
+    const reservationUpdate = { 
+      status: 'completed',
+      notes: reservation.notes ? `${reservation.notes}\n\n${returnNotes}` : returnNotes
+    };
+    if (parking_cost) reservationUpdate.parking_cost = parseFloat(parking_cost);
+    if (toll_cost) reservationUpdate.toll_cost = parseFloat(toll_cost);
+    if (req.body.fuel_cost) reservationUpdate.fuel_cost = parseFloat(req.body.fuel_cost);
 
     const { error: updateResError } = await supabase
       .from('reservations')
-      .update({ 
-        status: 'completed',
-        notes: reservation.notes ? `${reservation.notes}\n\n${returnNotes}` : returnNotes
-      })
+      .update(reservationUpdate)
       .eq('id', reservationId);
 
     if (updateResError) throw updateResError;
@@ -457,6 +479,21 @@ app.get('/api/maintenance', async (req, res) => {
         *,
         vehicles (*)
       `)
+      .order('scheduled_date', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/maintenance/vehicle/:vehicleId', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('maintenance')
+      .select('*')
+      .eq('vehicle_id', req.params.vehicleId)
       .order('scheduled_date', { ascending: false });
 
     if (error) throw error;

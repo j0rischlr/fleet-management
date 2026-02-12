@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle, Users, CalendarDays } from 'lucide-react'
+import { Calendar, Plus, Edit, Trash2, Car, X, CheckCircle, Users, CalendarDays, Eye, MapPin, Clock, CreditCard } from 'lucide-react'
 import ReservationCalendar from '../components/ReservationCalendar'
 
 export default function Reservations() {
@@ -15,6 +15,7 @@ export default function Reservations() {
   const [returningReservation, setReturningReservation] = useState(null)
   const [profiles, setProfiles] = useState([])
   const [filterUserId, setFilterUserId] = useState('all')
+  const [summaryReservation, setSummaryReservation] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -230,6 +231,13 @@ export default function Reservations() {
                         </button>
                       </>
                     )}
+                    <button
+                      onClick={() => setSummaryReservation(reservation)}
+                      className="p-2 text-gray-400 hover:text-primary"
+                      title="Voir le résumé"
+                    >
+                      <Eye className="h-5 w-5" />
+                    </button>
                     {(isAdmin() || reservation.user_id === user.id) && reservation.status !== 'completed' && (
                       <>
                         <button
@@ -265,7 +273,7 @@ export default function Reservations() {
       {showModal && (
         <ReservationModal
           reservation={editingReservation}
-          vehicles={vehicles.filter((v) => v.status === 'available')}
+          vehicles={vehicles.filter((v) => v.status === 'available' && !v.assigned_user_id)}
           allVehicles={vehicles}
           reservations={reservations}
           userId={user.id}
@@ -287,6 +295,14 @@ export default function Reservations() {
           }}
         />
       )}
+
+      {summaryReservation && (
+        <ReservationSummaryModal
+          reservation={summaryReservation}
+          profiles={profiles}
+          onClose={() => setSummaryReservation(null)}
+        />
+      )}
     </div>
   )
 }
@@ -300,6 +316,8 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
       start_date: '',
       end_date: '',
       purpose: '',
+      departure_location: '',
+      arrival_location: '',
       notes: '',
       status: 'pending',
     }
@@ -501,6 +519,29 @@ function ReservationModal({ reservation, vehicles, allVehicles, reservations, us
             />
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Lieu de départ</label>
+              <input
+                type="text"
+                value={formData.departure_location || ''}
+                onChange={(e) => setFormData({ ...formData, departure_location: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                placeholder="Ex: Paris"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Lieu d'arrivée</label>
+              <input
+                type="text"
+                value={formData.arrival_location || ''}
+                onChange={(e) => setFormData({ ...formData, arrival_location: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                placeholder="Ex: Lyon"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700">Notes</label>
             <textarea
@@ -637,6 +678,8 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
     issues_description: '',
     fuel_cost: '',
     fuel_liters: '',
+    parking_cost: '',
+    toll_cost: '',
   })
   const [loading, setLoading] = useState(false)
 
@@ -787,6 +830,37 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Coût du parking (€)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.parking_cost}
+                onChange={(e) => setFormData({ ...formData, parking_cost: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                placeholder="Ex: 15.00"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Coût du péage (€)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.toll_cost}
+                onChange={(e) => setFormData({ ...formData, toll_cost: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                placeholder="Ex: 25.00"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="flex items-center">
               <input
@@ -834,6 +908,205 @@ function VehicleReturnModal({ reservation, onClose, onSave }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function ReservationSummaryModal({ reservation, onClose }) {
+  const vehicle = reservation.vehicles
+  const profile = reservation.profiles
+
+  const startDate = new Date(reservation.start_date)
+  const endDate = new Date(reservation.end_date)
+  const durationMs = endDate - startDate
+  const durationHours = Math.floor(durationMs / (1000 * 60 * 60))
+  const durationDays = Math.floor(durationHours / 24)
+  const remainingHours = durationHours % 24
+
+  const formatDate = (date) => date.toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })
+
+  const durationText = durationDays > 0
+    ? `${durationDays} jour${durationDays > 1 ? 's' : ''}${remainingHours > 0 ? ` et ${remainingHours}h` : ''}`
+    : `${durationHours}h`
+
+  const statusLabels = {
+    pending: 'En attente',
+    approved: 'Approuvée',
+    active: 'Active',
+    completed: 'Terminée',
+    cancelled: 'Annulée',
+  }
+
+  const statusColors = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    approved: 'bg-blue-100 text-blue-800',
+    active: 'bg-green-100 text-green-800',
+    completed: 'bg-gray-100 text-gray-800',
+    cancelled: 'bg-red-100 text-red-800',
+  }
+
+  const hasCosts = reservation.parking_cost || reservation.toll_cost || reservation.fuel_cost
+  const totalCost = (parseFloat(reservation.parking_cost) || 0) + (parseFloat(reservation.toll_cost) || 0) + (parseFloat(reservation.fuel_cost) || 0)
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-primary to-blue-600 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="h-10 w-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                <Car className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Résumé de la réservation</h3>
+                <p className="text-sm text-white text-opacity-80">
+                  {vehicle?.brand} {vehicle?.model}
+                </p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Statut</span>
+            <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusColors[reservation.status]}`}>
+              {statusLabels[reservation.status]}
+            </span>
+          </div>
+
+          {/* Vehicle */}
+          <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+            <Car className="h-5 w-5 text-gray-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-gray-900">{vehicle?.brand} {vehicle?.model}</p>
+              <p className="text-xs text-gray-500">{vehicle?.license_plate}</p>
+            </div>
+          </div>
+
+          {/* Dates & Duration */}
+          <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+            <CalendarDays className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1 flex-1">
+              <div>
+                <span className="text-xs text-gray-500">Du </span>
+                <span className="text-sm font-medium text-gray-900">{formatDate(startDate)}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Au </span>
+                <span className="text-sm font-medium text-gray-900">{formatDate(endDate)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+            <Clock className="h-5 w-5 text-blue-500 flex-shrink-0" />
+            <div>
+              <span className="text-xs text-blue-600">Durée</span>
+              <p className="text-sm font-semibold text-blue-900">{durationText}</p>
+            </div>
+          </div>
+
+          {/* Locations */}
+          {(reservation.departure_location || reservation.arrival_location) && (
+            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+              <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1 flex-1">
+                {reservation.departure_location && (
+                  <div>
+                    <span className="text-xs text-gray-500">Départ : </span>
+                    <span className="text-sm font-medium text-gray-900">{reservation.departure_location}</span>
+                  </div>
+                )}
+                {reservation.arrival_location && (
+                  <div>
+                    <span className="text-xs text-gray-500">Arrivée : </span>
+                    <span className="text-sm font-medium text-gray-900">{reservation.arrival_location}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* User */}
+          {profile && (
+            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+              <Users className="h-5 w-5 text-gray-400 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">{profile.full_name || 'Utilisateur'}</p>
+                {profile.email && <p className="text-xs text-gray-500">{profile.email}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Purpose */}
+          {reservation.purpose && (
+            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+              <CheckCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs text-gray-500">Motif</span>
+                <p className="text-sm text-gray-900">{reservation.purpose}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Costs */}
+          {hasCosts && (
+            <div className="p-3 bg-orange-50 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <CreditCard className="h-5 w-5 text-orange-500" />
+                <span className="text-sm font-medium text-orange-900">Coûts déclarés</span>
+              </div>
+              <div className="space-y-1 ml-7">
+                {reservation.fuel_cost && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Carburant</span>
+                    <span className="font-medium text-gray-900">{parseFloat(reservation.fuel_cost).toFixed(2)} €</span>
+                  </div>
+                )}
+                {reservation.parking_cost && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Parking</span>
+                    <span className="font-medium text-gray-900">{parseFloat(reservation.parking_cost).toFixed(2)} €</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Péage</span>
+                  <span className="font-medium text-gray-900">{(parseFloat(reservation.toll_cost) || 0).toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between text-sm pt-1 border-t border-orange-200 mt-1">
+                  <span className="font-medium text-gray-700">Total</span>
+                  <span className="font-bold text-orange-900">{totalCost.toFixed(2)} €</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {reservation.notes && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <span className="text-xs text-gray-500">Notes</span>
+              <p className="text-sm text-gray-900 mt-1 whitespace-pre-line">{reservation.notes}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Fermer
+          </button>
+        </div>
       </div>
     </div>
   )

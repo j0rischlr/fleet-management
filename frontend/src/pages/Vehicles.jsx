@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { Car, Plus, Edit, Trash2, Search, X, Shield, Fuel, Calendar, ClipboardList, Euro, History } from 'lucide-react'
+import { Car, Plus, Edit, Trash2, Search, X, Shield, Fuel, Calendar, ClipboardList, Euro, History, User } from 'lucide-react'
 
 export default function Vehicles() {
-  const { isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
+  const navigate = useNavigate()
   const [vehicles, setVehicles] = useState([])
   const [reservations, setReservations] = useState([])
   const [filteredVehicles, setFilteredVehicles] = useState([])
@@ -44,7 +46,7 @@ export default function Vehicles() {
       
       const vehiclesWithStatus = vehiclesData.map(vehicle => ({
         ...vehicle,
-        displayStatus: getVehicleStatus(vehicle, reservationsData)
+        displayStatus: vehicle.assigned_user_id ? 'assigned' : getVehicleStatus(vehicle, reservationsData)
       }))
       
       setVehicles(vehiclesWithStatus)
@@ -119,6 +121,7 @@ export default function Vehicles() {
     reserved: 'bg-yellow-100 text-yellow-800',
     maintenance: 'bg-red-100 text-red-800',
     unavailable: 'bg-gray-100 text-gray-800',
+    assigned: 'bg-amber-100 text-amber-800',
   }
 
   const statusLabels = {
@@ -126,6 +129,7 @@ export default function Vehicles() {
     reserved: 'Réservé',
     maintenance: 'Maintenance',
     unavailable: 'Indisponible',
+    assigned: 'Attribué',
   }
 
   if (loading) {
@@ -176,13 +180,18 @@ export default function Vehicles() {
             <option value="reserved">Réservé</option>
             <option value="maintenance">Maintenance</option>
             <option value="unavailable">Indisponible</option>
+            <option value="assigned">Attribué</option>
           </select>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredVehicles.map((vehicle) => (
-          <div key={vehicle.id} className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer" onClick={() => openDetailModal(vehicle)}>
+          <div key={vehicle.id} className={`bg-white shadow rounded-lg overflow-hidden transition-shadow ${(!vehicle.assigned_user_id || vehicle.assigned_user_id === user?.id || isAdmin()) ? 'hover:shadow-lg cursor-pointer' : 'opacity-75'}`} onClick={() => {
+              if (!vehicle.assigned_user_id || vehicle.assigned_user_id === user?.id || isAdmin()) {
+                navigate(`/dashboard/vehicles/${vehicle.id}`)
+              }
+            }}>
             <div className="h-48 bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center">
               <Car className="h-24 w-24 text-primary" />
             </div>

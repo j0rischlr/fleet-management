@@ -171,7 +171,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Vue pour afficher toutes les alertes de maintenance actives
-CREATE OR REPLACE VIEW v_maintenance_alerts AS
+CREATE OR REPLACE VIEW v_maintenance_alerts
+WITH (security_invoker = on) AS
 SELECT 
   v.id as vehicle_id,
   v.brand,

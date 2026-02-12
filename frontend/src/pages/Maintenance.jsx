@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
-import { Wrench, Plus, Edit, Car, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Wrench, Plus, Edit, Car, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 export default function Maintenance() {
   const location = useLocation()
@@ -12,6 +12,8 @@ export default function Maintenance() {
   const [editingMaintenance, setEditingMaintenance] = useState(null)
   const [prefillData, setPrefillData] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [completingRecord, setCompletingRecord] = useState(null)
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -51,31 +53,29 @@ export default function Maintenance() {
   }
 
   const handleStatusChange = async (id, newStatus) => {
+    if (newStatus === 'completed') {
+      const record = maintenanceRecords.find(m => m.id === id)
+      const vehicle = vehicles.find(v => v.id === record?.vehicle_id)
+      setCompletingRecord({ record, vehicle })
+      setShowCompletionModal(true)
+      return
+    }
     try {
-      const updateData = { status: newStatus }
-      if (newStatus === 'completed') {
-        updateData.completed_date = new Date().toISOString()
-        
-        const record = maintenanceRecords.find(m => m.id === id)
-        const vehicle = vehicles.find(v => v.id === record?.vehicle_id)
-        
-        if (vehicle) {
-          const mileage = prompt(
-            `Kilométrage actuel du véhicule ${vehicle.brand} ${vehicle.model}:`,
-            vehicle.mileage?.toString() || '0'
-          )
-          
-          if (mileage !== null) {
-            updateData.mileage_at_service = parseInt(mileage)
-          } else {
-            return
-          }
-        }
-      }
-      await api.put(`/maintenance/${id}`, updateData)
+      await api.put(`/maintenance/${id}`, { status: newStatus })
       loadData()
     } catch (error) {
       console.error('Error updating status:', error)
+    }
+  }
+
+  const handleCompleteMaintenance = async (completionData) => {
+    try {
+      await api.put(`/maintenance/${completingRecord.record.id}`, completionData)
+      setShowCompletionModal(false)
+      setCompletingRecord(null)
+      loadData()
+    } catch (error) {
+      console.error('Error completing maintenance:', error)
     }
   }
 
@@ -262,6 +262,15 @@ export default function Maintenance() {
           }}
         />
       )}
+
+      {showCompletionModal && completingRecord && (
+        <CompletionModal
+          record={completingRecord.record}
+          vehicle={completingRecord.vehicle}
+          onClose={() => { setShowCompletionModal(false); setCompletingRecord(null) }}
+          onSave={handleCompleteMaintenance}
+        />
+      )}
     </div>
   )
 }
@@ -276,7 +285,6 @@ function MaintenanceModal({ maintenance, vehicles, prefillData, onClose, onSave 
         description: prefillData.alerts[0]?.rule_name || '',
         scheduled_date: '',
         status: 'scheduled',
-        cost: '',
         provider: '',
         notes: '',
       }
@@ -287,7 +295,6 @@ function MaintenanceModal({ maintenance, vehicles, prefillData, onClose, onSave 
       description: '',
       scheduled_date: '',
       status: 'scheduled',
-      cost: '',
       provider: '',
       notes: '',
     }
@@ -399,17 +406,19 @@ function MaintenanceModal({ maintenance, vehicles, prefillData, onClose, onSave 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Coût (€)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.cost}
-                onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-              />
-            </div>
+          <div className={maintenance ? 'grid grid-cols-2 gap-4' : ''}>
+            {maintenance && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Coût (€)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.cost || ''}
+                  onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700">Prestataire</label>
               <input
@@ -445,6 +454,93 @@ function MaintenanceModal({ maintenance, vehicles, prefillData, onClose, onSave 
               className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600 disabled:opacity-50"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function CompletionModal({ record, vehicle, onClose, onSave }) {
+  const [formData, setFormData] = useState({
+    mileage_at_service: vehicle?.mileage || 0,
+    cost: '',
+  })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await onSave({
+        status: 'completed',
+        completed_date: new Date().toISOString(),
+        mileage_at_service: parseInt(formData.mileage_at_service),
+        cost: formData.cost ? parseFloat(formData.cost) : null,
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">Terminer la maintenance</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <p className="text-sm font-medium text-gray-900">
+            {vehicle?.brand} {vehicle?.model} — {vehicle?.license_plate}
+          </p>
+          <p className="text-sm text-gray-500 mt-1">{record.description}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Kilométrage actuel</label>
+            <input
+              type="number"
+              required
+              min="0"
+              value={formData.mileage_at_service}
+              onChange={(e) => setFormData({ ...formData, mileage_at_service: e.target.value })}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Coût (€)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.cost}
+              onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              placeholder="Optionnel"
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+            >
+              {loading ? 'Enregistrement...' : 'Confirmer'}
             </button>
           </div>
         </form>

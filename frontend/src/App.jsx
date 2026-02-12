@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Vehicles from './pages/Vehicles'
+import VehicleDetail from './pages/VehicleDetail'
 import Reservations from './pages/Reservations'
 import Maintenance from './pages/Maintenance'
 import MaintenanceAlerts from './pages/MaintenanceAlerts'
@@ -58,6 +59,7 @@ function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="vehicles" element={<Vehicles />} />
+            <Route path="vehicles/:id" element={<VehicleDetail />} />
             <Route path="reservations" element={<Reservations />} />
             <Route path="maintenance" element={<Maintenance />} />
             <Route path="maintenance-alerts" element={<MaintenanceAlerts />} />
