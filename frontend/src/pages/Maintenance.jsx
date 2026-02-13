@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
-import { Wrench, Plus, Edit, Car, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Wrench, Plus, Edit, Car, ChevronLeft, ChevronRight, X, Filter } from 'lucide-react'
 
 export default function Maintenance() {
   const location = useLocation()
@@ -14,6 +14,7 @@ export default function Maintenance() {
   const [currentPage, setCurrentPage] = useState(1)
   const [showCompletionModal, setShowCompletionModal] = useState(false)
   const [completingRecord, setCompletingRecord] = useState(null)
+  const [selectedVehicleId, setSelectedVehicleId] = useState('')
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -126,18 +127,45 @@ export default function Maintenance() {
           <h1 className="text-3xl font-bold text-gray-900">Maintenance</h1>
           <p className="mt-2 text-gray-600">Gérez la maintenance des véhicules</p>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Planifier une maintenance
-        </button>
+        <div className="mt-4 sm:mt-0 flex items-center space-x-3">
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={selectedVehicleId}
+              onChange={(e) => { setSelectedVehicleId(e.target.value); setCurrentPage(1) }}
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-primary focus:border-primary"
+            >
+              <option value="">Sélectionner un véhicule</option>
+              {vehicles.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.brand} {v.model} — {v.license_plate}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => openModal()}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Planifier une maintenance
+          </button>
+        </div>
       </div>
 
+      {!selectedVehicleId ? (
+        <div className="text-center py-16 bg-white rounded-lg shadow">
+          <Wrench className="mx-auto h-14 w-14 text-gray-300" />
+          <h2 className="mt-4 text-lg font-semibold text-gray-700">Page de maintenance</h2>
+          <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto">
+            Sélectionnez un véhicule dans le filtre ci-dessus pour consulter et gérer son historique de maintenance.
+          </p>
+        </div>
+      ) : (
+      <>
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <ul className="divide-y divide-gray-200">
-          {maintenanceRecords.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((record) => {
+          {maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((record) => {
             const vehicle = record.vehicles
             return (
               <li key={record.id} className="p-6 hover:bg-gray-50">
@@ -211,12 +239,12 @@ export default function Maintenance() {
         </ul>
       </div>
 
-      {maintenanceRecords.length > itemsPerPage && (
+      {maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length > itemsPerPage && (
         <div className="flex items-center justify-between mt-4 bg-white px-4 py-3 rounded-lg shadow sm:px-6">
           <div className="text-sm text-gray-700">
             Affichage de <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> à{' '}
-            <span className="font-medium">{Math.min(currentPage * itemsPerPage, maintenanceRecords.length)}</span> sur{' '}
-            <span className="font-medium">{maintenanceRecords.length}</span> maintenances
+            <span className="font-medium">{Math.min(currentPage * itemsPerPage, maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length)}</span> sur{' '}
+            <span className="font-medium">{maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length}</span> maintenances
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -228,11 +256,11 @@ export default function Maintenance() {
               Précédent
             </button>
             <span className="text-sm text-gray-700">
-              Page {currentPage} / {Math.ceil(maintenanceRecords.length / itemsPerPage)}
+              Page {currentPage} / {Math.ceil(maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length / itemsPerPage)}
             </span>
             <button
-              onClick={() => setCurrentPage(p => Math.min(Math.ceil(maintenanceRecords.length / itemsPerPage), p + 1))}
-              disabled={currentPage >= Math.ceil(maintenanceRecords.length / itemsPerPage)}
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length / itemsPerPage), p + 1))}
+              disabled={currentPage >= Math.ceil(maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length / itemsPerPage)}
               className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Suivant
@@ -242,13 +270,16 @@ export default function Maintenance() {
         </div>
       )}
 
-      {maintenanceRecords.length === 0 && (
+      {maintenanceRecords.filter(r => r.vehicle_id === selectedVehicleId).length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <Wrench className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Aucune maintenance</h3>
-          <p className="mt-1 text-sm text-gray-500">Planifiez la première maintenance.</p>
+          <p className="mt-1 text-sm text-gray-500">Aucune maintenance enregistrée pour ce véhicule.</p>
         </div>
       )}
+      </>
+      )}
+
 
       {showModal && (
         <MaintenanceModal

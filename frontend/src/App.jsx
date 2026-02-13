@@ -12,6 +12,7 @@ import MaintenanceAlerts from './pages/MaintenanceAlerts'
 import ResetPassword from './pages/ResetPassword'
 import Layout from './components/Layout'
 import GarageBooking from './pages/GarageBooking'
+import usePageTitle from './hooks/usePageTitle'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -41,10 +42,16 @@ function PublicRoute({ children }) {
   return user ? <Navigate to="/dashboard" /> : children
 }
 
+function PageTitleUpdater() {
+  usePageTitle()
+  return null
+}
+
 function App() {
   return (
     <AuthProvider>
       <Router>
+        <PageTitleUpdater />
         <Routes>
           <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />

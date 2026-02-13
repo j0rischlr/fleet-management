@@ -568,6 +568,17 @@ app.put('/api/maintenance/:id', async (req, res) => {
       if (vehicleError) throw vehicleError;
     }
 
+    // Clear notified alerts for this vehicle when maintenance is completed
+    // so the alert disappears (the calculate_maintenance_alerts function
+    // will no longer generate it since a completed maintenance now exists)
+    if (req.body.status === 'completed' && data.vehicle_id) {
+      for (const key of notifiedAlerts) {
+        if (key.startsWith(data.vehicle_id)) {
+          notifiedAlerts.delete(key);
+        }
+      }
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1141,8 +1152,8 @@ async function checkAndNotifyAlerts() {
   }
 }
 
-// Check alerts every 30 minutes
-const ALERT_CHECK_INTERVAL = 30 * 60 * 1000;
+// Check alerts every 1 minute
+const ALERT_CHECK_INTERVAL = 1 * 60 * 1000;
 setInterval(checkAndNotifyAlerts, ALERT_CHECK_INTERVAL);
 
 app.listen(PORT, () => {
