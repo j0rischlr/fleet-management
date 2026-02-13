@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { Car, Calendar, Wrench, TrendingUp } from 'lucide-react'
+import { Car, Calendar, Wrench, TrendingUp, X, MapPin } from 'lucide-react'
 import DashboardCalendar from '../components/DashboardCalendar'
 
 export default function Dashboard() {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const [stats, setStats] = useState({
     totalVehicles: 0,
     availableVehicles: 0,
@@ -16,10 +16,73 @@ export default function Dashboard() {
   const [reservations, setReservations] = useState([])
   const [maintenance, setMaintenance] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showReservationModal, setShowReservationModal] = useState(false)
+  const [reservationForm, setReservationForm] = useState({
+    vehicle_id: '',
+    start_date: '',
+    end_date: '',
+    purpose: '',
+    departure_location: '',
+    arrival_location: '',
+    notes: '',
+    status: 'pending',
+  })
+  const [reservationLoading, setReservationLoading] = useState(false)
+  const [reservationError, setReservationError] = useState(null)
 
   useEffect(() => {
     loadStats()
   }, [])
+
+  const formatDateTime = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+  }
+
+  const handleCalendarSlotSelect = (slotInfo) => {
+    setReservationForm({
+      vehicle_id: '',
+      user_id: user?.id,
+      start_date: formatDateTime(new Date(slotInfo.start)),
+      end_date: formatDateTime(new Date(slotInfo.end)),
+      purpose: '',
+      departure_location: '',
+      arrival_location: '',
+      notes: '',
+      status: 'pending',
+    })
+    setReservationError(null)
+    setShowReservationModal(true)
+  }
+
+  const closeReservationModal = () => {
+    setShowReservationModal(false)
+    setReservationError(null)
+  }
+
+  const handleReservationSubmit = async (e) => {
+    e.preventDefault()
+    setReservationLoading(true)
+    setReservationError(null)
+    try {
+      await api.post('/reservations', { ...reservationForm, user_id: user?.id })
+      closeReservationModal()
+      loadStats()
+    } catch (err) {
+      console.error('Error creating reservation:', err)
+      if (err.response?.status === 409) {
+        setReservationError(err.response.data.error)
+      } else {
+        setReservationError('Erreur lors de la création de la réservation')
+      }
+    } finally {
+      setReservationLoading(false)
+    }
+  }
 
   const loadStats = async () => {
     try {
@@ -121,8 +184,140 @@ export default function Dashboard() {
           reservations={reservations}
           maintenance={maintenance}
           vehicles={vehicles}
+          onSelectSlot={handleCalendarSlotSelect}
         />
       </div>
+
+      {showReservationModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border shadow-lg rounded-md bg-white w-full max-w-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">Nouvelle réservation</h3>
+              <button onClick={closeReservationModal} className="text-gray-400 hover:text-gray-600">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {reservationError && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
+                <div className="flex">
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-red-800">{reservationError}</p>
+                  </div>
+                  <div className="ml-auto pl-3">
+                    <button onClick={() => setReservationError(null)} className="inline-flex text-red-400 hover:text-red-600">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleReservationSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Véhicule</label>
+                <select
+                  required
+                  value={reservationForm.vehicle_id}
+                  onChange={(e) => setReservationForm({ ...reservationForm, vehicle_id: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                >
+                  <option value="">Sélectionner un véhicule</option>
+                  {vehicles.filter(v => v.status === 'available' && !v.assigned_user_id).map((vehicle) => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.brand} {vehicle.model} - {vehicle.license_plate}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Date de début</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={reservationForm.start_date}
+                    onChange={(e) => setReservationForm({ ...reservationForm, start_date: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Date de fin</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={reservationForm.end_date}
+                    onChange={(e) => setReservationForm({ ...reservationForm, end_date: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Motif</label>
+                <input
+                  type="text"
+                  value={reservationForm.purpose}
+                  onChange={(e) => setReservationForm({ ...reservationForm, purpose: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                  placeholder="Ex: Déplacement professionnel"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Lieu de départ</label>
+                  <input
+                    type="text"
+                    value={reservationForm.departure_location}
+                    onChange={(e) => setReservationForm({ ...reservationForm, departure_location: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                    placeholder="Ex: Paris"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Lieu d'arrivée</label>
+                  <input
+                    type="text"
+                    value={reservationForm.arrival_location}
+                    onChange={(e) => setReservationForm({ ...reservationForm, arrival_location: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                    placeholder="Ex: Lyon"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Notes</label>
+                <textarea
+                  value={reservationForm.notes}
+                  onChange={(e) => setReservationForm({ ...reservationForm, notes: e.target.value })}
+                  rows={3}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeReservationModal}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={reservationLoading}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-600 disabled:opacity-50"
+                >
+                  {reservationLoading ? 'Enregistrement...' : 'Réserver'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 bg-white shadow rounded-lg p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Aperçu rapide</h2>

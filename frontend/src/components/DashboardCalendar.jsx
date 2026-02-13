@@ -18,7 +18,7 @@ const localizer = dateFnsLocalizer({
   locales,
 })
 
-export default function DashboardCalendar({ reservations, maintenance, vehicles }) {
+export default function DashboardCalendar({ reservations, maintenance, vehicles, onSelectSlot }) {
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   const reservationEvents = reservations
@@ -172,6 +172,8 @@ export default function DashboardCalendar({ reservations, maintenance, vehicles 
           }}
           eventPropGetter={eventStyleGetter}
           onSelectEvent={handleSelectEvent}
+          selectable
+          onSelectSlot={onSelectSlot}
           views={['week', 'day', 'agenda']}
           defaultView="week"
           toolbar={true}

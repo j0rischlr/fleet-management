@@ -11,6 +11,7 @@ import Maintenance from './pages/Maintenance'
 import MaintenanceAlerts from './pages/MaintenanceAlerts'
 import ResetPassword from './pages/ResetPassword'
 import Layout from './components/Layout'
+import GarageBooking from './pages/GarageBooking'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -64,6 +65,7 @@ function App() {
             <Route path="maintenance" element={<Maintenance />} />
             <Route path="maintenance-alerts" element={<MaintenanceAlerts />} />
           </Route>
+          <Route path="/garage-booking/:token" element={<GarageBooking />} />
         </Routes>
       </Router>
     </AuthProvider>

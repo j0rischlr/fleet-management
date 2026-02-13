@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
 
 dotenv.config();
 
@@ -16,9 +18,36 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Direct PostgreSQL connection for tables not in PostgREST schema cache
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+// Auto-create garage_booking_tokens table if it doesn't exist
+pool.query(`
+  CREATE TABLE IF NOT EXISTS garage_booking_tokens (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    vehicle_id UUID NOT NULL,
+    alert_rule_name TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  )
+`).then(() => {
+  console.log('[DB] garage_booking_tokens table ready');
+}).catch(err => {
+  console.error('[DB] Error creating garage_booking_tokens table:', err.message);
+});
+
 // Email notification config
 const ALERT_EMAILS = (process.env.ALERT_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
 const EDGE_FUNCTION_URL = process.env.SUPABASE_EDGE_FUNCTION_URL;
+const GARAGE_EMAIL = process.env.GARAGE_EMAIL || '';
+const COMPANY_NAME = process.env.COMPANY_NAME || 'Mon Entreprise';
+const APP_NAME = process.env.APP_NAME || 'Fleet Manager';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 async function sendAlertEmail(to, subject, html) {
   if (!EDGE_FUNCTION_URL) {
@@ -835,11 +864,183 @@ app.put('/api/profiles/:userId', async (req, res) => {
   }
 });
 
+// ===== Garage Booking Public Endpoints =====
+
+// Validate a garage booking token and return vehicle + reservations
+app.get('/api/garage-booking/:token', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT g.*, v.brand AS vehicle_brand, v.model AS vehicle_model, v.license_plate AS vehicle_license_plate,
+              v.year AS vehicle_year, v.fuel_type AS vehicle_fuel_type, v.mileage AS vehicle_mileage
+       FROM garage_booking_tokens g
+       JOIN vehicles v ON v.id = g.vehicle_id
+       WHERE g.token = $1`,
+      [req.params.token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Lien invalide ou expiré.' });
+    }
+
+    const tokenData = result.rows[0];
+
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Ce lien a expiré.' });
+    }
+
+    // Fetch reservations for this vehicle
+    const { data: reservations, error: resError } = await supabase
+      .from('reservations')
+      .select('*, profiles(full_name, email)')
+      .eq('vehicle_id', tokenData.vehicle_id)
+      .in('status', ['approved', 'pending', 'active'])
+      .order('start_date');
+
+    if (resError) throw resError;
+
+    // Fetch maintenance for this vehicle
+    const { data: maintenanceData, error: maintError } = await supabase
+      .from('maintenance')
+      .select('*')
+      .eq('vehicle_id', tokenData.vehicle_id)
+      .in('status', ['scheduled', 'in_progress'])
+      .order('scheduled_date');
+
+    if (maintError) throw maintError;
+
+    res.json({
+      vehicle: {
+        id: tokenData.vehicle_id,
+        brand: tokenData.vehicle_brand,
+        model: tokenData.vehicle_model,
+        license_plate: tokenData.vehicle_license_plate,
+        year: tokenData.vehicle_year,
+        fuel_type: tokenData.vehicle_fuel_type,
+        mileage: tokenData.vehicle_mileage,
+      },
+      alert_rule_name: tokenData.alert_rule_name,
+      reservations: reservations || [],
+      maintenance: maintenanceData || [],
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Garage submits a maintenance booking via token
+app.post('/api/garage-booking/:token', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM garage_booking_tokens WHERE token = $1',
+      [req.params.token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Lien invalide ou expiré.' });
+    }
+
+    const tokenData = result.rows[0];
+
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Ce lien a expiré.' });
+    }
+
+    const { scheduled_date, description } = req.body;
+
+    if (!scheduled_date) {
+      return res.status(400).json({ error: 'La date est requise.' });
+    }
+
+    // Create a maintenance entry
+    const { data, error } = await supabase
+      .from('maintenance')
+      .insert({
+        vehicle_id: tokenData.vehicle_id,
+        type: 'routine',
+        description: description || `Rendez-vous garage - ${tokenData.alert_rule_name}`,
+        scheduled_date,
+        status: 'scheduled',
+        cost: 0,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Mark token as used
+    await pool.query('UPDATE garage_booking_tokens SET used = true WHERE token = $1', [req.params.token]);
+
+    res.json({ message: 'Rendez-vous enregistré avec succès.', maintenance: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== End Garage Booking =====
+
 // Track notified alerts to avoid duplicate emails
 const notifiedAlerts = new Set();
 
+// Rule names that should trigger a garage email
+const GARAGE_ALERT_RULES = [
+  'Contrôle pneumatiques',
+  'Entretien essence/diesel',
+  'Révision annuelle électrique',
+  'Entretien hybride',
+];
+
+async function generateGarageToken(vehicleId, alertRuleName) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30); // 30 days validity
+
+  try {
+    await pool.query(
+      'INSERT INTO garage_booking_tokens (token, vehicle_id, alert_rule_name, expires_at) VALUES ($1, $2, $3, $4)',
+      [token, vehicleId, alertRuleName, expiresAt.toISOString()]
+    );
+    return token;
+  } catch (error) {
+    console.error('Error creating garage token:', error.message);
+    return null;
+  }
+}
+
+function buildGarageEmailHtml(vehicle, alertRuleName, bookingUrl) {
+  return `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      <div style="background:#1e40af;color:white;padding:24px 28px;">
+        <h1 style="margin:0;font-size:20px;">${APP_NAME}</h1>
+        <p style="margin:4px 0 0;font-size:13px;opacity:0.85;">${COMPANY_NAME}</p>
+      </div>
+      <div style="padding:28px;">
+        <p style="color:#111827;font-size:15px;line-height:1.6;margin:0 0 16px;">Bonjour,</p>
+        <p style="color:#111827;font-size:15px;line-height:1.6;margin:0 0 16px;">
+          Le véhicule <strong>${vehicle.brand} ${vehicle.model}</strong> (immatriculation <strong>${vehicle.license_plate}</strong>) 
+          nécessite une intervention de type <strong>${alertRuleName}</strong>.
+        </p>
+        <p style="color:#111827;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          Nous vous invitons à planifier un rendez-vous en cliquant sur le bouton ci-dessous. 
+          Vous pourrez consulter le calendrier de disponibilité du véhicule et proposer un créneau.
+        </p>
+        <div style="text-align:center;margin:28px 0;">
+          <a href="${bookingUrl}" 
+             style="display:inline-block;background:#1e40af;color:white;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
+            Planifier le rendez-vous
+          </a>
+        </div>
+        <p style="color:#6b7280;font-size:12px;line-height:1.5;margin:24px 0 0;border-top:1px solid #e5e7eb;padding-top:16px;">
+          Ce lien est valable 30 jours. Si vous avez des questions, contactez-nous directement.<br/>
+          — ${COMPANY_NAME}
+        </p>
+      </div>
+    </div>
+  `;
+}
+
 async function checkAndNotifyAlerts() {
-  if (ALERT_EMAILS.length === 0 || !EDGE_FUNCTION_URL) return;
+  if (!EDGE_FUNCTION_URL) return;
+  if (ALERT_EMAILS.length === 0 && !GARAGE_EMAIL) return;
 
   try {
     const [alertsResult, vehiclesResult] = await Promise.all([
@@ -865,50 +1066,76 @@ async function checkAndNotifyAlerts() {
 
     if (newAlerts.length === 0) return;
 
-    const alertRows = newAlerts.map(a => {
-      const priority = a.priority === 'urgent' ? '🔴 Urgent' : '🟠 Haute';
-      return `<tr>
-        <td style="padding:8px;border:1px solid #ddd;">${a.vehicle_brand || ''} ${a.vehicle_model || ''}</td>
-        <td style="padding:8px;border:1px solid #ddd;">${a.license_plate || ''}</td>
-        <td style="padding:8px;border:1px solid #ddd;">${a.rule_name || ''}</td>
-        <td style="padding:8px;border:1px solid #ddd;">${a.description || ''}</td>
-        <td style="padding:8px;border:1px solid #ddd;">${priority}</td>
-      </tr>`;
-    }).join('');
+    // --- Internal team notification ---
+    if (ALERT_EMAILS.length > 0) {
+      const alertRows = newAlerts.map(a => {
+        const priority = a.priority === 'urgent' ? '🔴 Urgent' : '🟠 Haute';
+        return `<tr>
+          <td style="padding:8px;border:1px solid #ddd;">${a.vehicle_brand || ''} ${a.vehicle_model || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${a.license_plate || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${a.rule_name || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${a.description || ''}</td>
+          <td style="padding:8px;border:1px solid #ddd;">${priority}</td>
+        </tr>`;
+      }).join('');
 
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;">
-        <div style="background:#c05c4f;color:white;padding:20px;border-radius:8px 8px 0 0;">
-          <h1 style="margin:0;font-size:22px;">🚨 Nouvelles alertes de maintenance - Fleet Manager</h1>
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;">
+          <div style="background:#c05c4f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+            <h1 style="margin:0;font-size:22px;">🚨 Nouvelles alertes de maintenance - ${APP_NAME}</h1>
+          </div>
+          <div style="padding:20px;background:#faf3f2;border-radius:0 0 8px 8px;">
+            <p style="color:#0d0604;"><strong>${newAlerts.length}</strong> nouvelle(s) alerte(s) détectée(s) :</p>
+            <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+              <thead>
+                <tr style="background:#c05c4f;color:white;">
+                  <th style="padding:8px;text-align:left;">Véhicule</th>
+                  <th style="padding:8px;text-align:left;">Plaque</th>
+                  <th style="padding:8px;text-align:left;">Type</th>
+                  <th style="padding:8px;text-align:left;">Description</th>
+                  <th style="padding:8px;text-align:left;">Priorité</th>
+                </tr>
+              </thead>
+              <tbody>${alertRows}</tbody>
+            </table>
+            <p style="margin-top:20px;color:#666;font-size:13px;">Connectez-vous à ${APP_NAME} pour planifier les maintenances nécessaires.</p>
+          </div>
         </div>
-        <div style="padding:20px;background:#faf3f2;border-radius:0 0 8px 8px;">
-          <p style="color:#0d0604;"><strong>${newAlerts.length}</strong> nouvelle(s) alerte(s) détectée(s) :</p>
-          <table style="width:100%;border-collapse:collapse;margin-top:16px;">
-            <thead>
-              <tr style="background:#c05c4f;color:white;">
-                <th style="padding:8px;text-align:left;">Véhicule</th>
-                <th style="padding:8px;text-align:left;">Plaque</th>
-                <th style="padding:8px;text-align:left;">Type</th>
-                <th style="padding:8px;text-align:left;">Description</th>
-                <th style="padding:8px;text-align:left;">Priorité</th>
-              </tr>
-            </thead>
-            <tbody>${alertRows}</tbody>
-          </table>
-          <p style="margin-top:20px;color:#666;font-size:13px;">Connectez-vous à Fleet Manager pour planifier les maintenances nécessaires.</p>
-        </div>
-      </div>
-    `;
+      `;
 
-    const subject = `🚨 ${newAlerts.length} nouvelle(s) alerte(s) de maintenance - Fleet Manager`;
+      const subject = `🚨 ${newAlerts.length} nouvelle(s) alerte(s) de maintenance - ${APP_NAME}`;
 
-    await Promise.all(
-      ALERT_EMAILS.map(email => sendAlertEmail(email, subject, html))
-    );
+      await Promise.all(
+        ALERT_EMAILS.map(email => sendAlertEmail(email, subject, html))
+      );
+      console.log(`[Auto-notify] ${newAlerts.length} alerte(s) envoyée(s) à ${ALERT_EMAILS.join(', ')}`);
+    }
+
+    // --- Garage notification for relevant alerts ---
+    if (GARAGE_EMAIL) {
+      const garageAlerts = newAlerts.filter(a => GARAGE_ALERT_RULES.includes(a.rule_name));
+
+      for (const alert of garageAlerts) {
+        const vehicle = vehiclesResult.data?.find(v => v.id === alert.vehicle_id) || {
+          brand: alert.vehicle_brand || '',
+          model: alert.vehicle_model || '',
+          license_plate: alert.license_plate || '',
+        };
+
+        const token = await generateGarageToken(alert.vehicle_id, alert.rule_name);
+        if (!token) continue;
+
+        const bookingUrl = `${FRONTEND_URL}/garage-booking/${token}`;
+        const garageHtml = buildGarageEmailHtml(vehicle, alert.rule_name, bookingUrl);
+        const garageSubject = `🔧 ${vehicle.brand} ${vehicle.model} (${vehicle.license_plate}) - ${alert.rule_name} - ${COMPANY_NAME}`;
+
+        await sendAlertEmail(GARAGE_EMAIL, garageSubject, garageHtml);
+        console.log(`[Auto-notify] Garage email sent for ${vehicle.license_plate} - ${alert.rule_name}`);
+      }
+    }
 
     // Mark these alerts as notified
     newAlerts.forEach(a => notifiedAlerts.add(`${a.vehicle_id}-${a.rule_name}`));
-    console.log(`[Auto-notify] ${newAlerts.length} nouvelle(s) alerte(s) envoyée(s) à ${ALERT_EMAILS.join(', ')}`);
   } catch (error) {
     console.error('[Auto-notify] Error:', error.message);
   }
